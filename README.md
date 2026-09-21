@@ -10,8 +10,9 @@ site, so what it shows is always what is deployed.
 - The site is given no access to Tauri's APIs (`capabilities/default.json`
   names only the core defaults).
 
-It is its own Cargo workspace, so the server's `cargo` commands never build
-it, and `.dockerignore` keeps it out of the server image.
+The site itself is [oeee-cafe/web](https://github.com/oeee-cafe/web); the
+other clients are [oeee-cafe/ios](https://github.com/oeee-cafe/ios) and
+[oeee-cafe/android](https://github.com/oeee-cafe/android).
 
 ## Running it
 
@@ -61,7 +62,7 @@ the build goes live on in Steamworks (SteamPipe > Builds).
   closing the window. Check each platform before release.
 - **Downloads.** Saving an image or `.pch` from the site has not been tried in
   the webview.
-- **Icons.** Generated from the 256px `static/favicon.png`; regenerate from a
+- **Icons.** Generated from the 256px `static/favicon.png` in oeee-cafe/web; regenerate from a
   1024px source with `cargo tauri icon <file>` before release.
 - **macOS signing and notarisation**, needed for the `.app` to open without a
   Gatekeeper warning.

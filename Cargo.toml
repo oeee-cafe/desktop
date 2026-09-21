@@ -3,11 +3,9 @@ name = "oeee-cafe-desktop"
 version = "0.1.0"
 edition = "2021"
 publish = false
+license = "AGPL-3.0-only"
+repository = "https://github.com/oeee-cafe/desktop"
 description = "Oeee Cafe for Steam: a window onto oeee.cafe"
-
-# Its own workspace, so the server's `cargo` commands never build a GUI and
-# this never inherits the server's lockfile or `debug = true` release profile.
-[workspace]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
