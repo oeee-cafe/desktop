@@ -226,6 +226,9 @@ fn main() {
             let builder = builder
                 .title_bar_style(tauri::TitleBarStyle::Overlay)
                 .hidden_title(true)
+                // A force click on a link opens WebKit's preview of the page,
+                // which is a browser's gesture, not an application's.
+                .allow_link_preview(false)
                 .traffic_light_position(tauri::LogicalPosition::new(20.0, 19.0));
             let window = builder
                 // Edge's address and contact suggestions over form fields.
