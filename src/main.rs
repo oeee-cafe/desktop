@@ -75,12 +75,12 @@ const QUIET_CONTEXT_MENU: &str = r#"window.addEventListener("contextmenu", funct
   event.preventDefault();
 });"#;
 
-/// What the window shows before a page has painted: the site's ground, the
-/// system's own window grey, in each theme, so a load does not flash.
+/// What the window shows before a page has painted: the site's ground, which
+/// is NEO's -- lavender, or its night blue -- so a load does not flash.
 fn background(theme: tauri::Theme) -> tauri::window::Color {
     match theme {
-        tauri::Theme::Dark => tauri::window::Color(0x1e, 0x1e, 0x1e, 0xff),
-        _ => tauri::window::Color(0xec, 0xec, 0xec, 0xff),
+        tauri::Theme::Dark => tauri::window::Color(0x17, 0x17, 0x2b, 0xff),
+        _ => tauri::window::Color(0xcc, 0xcc, 0xff, 0xff),
     }
 }
 
