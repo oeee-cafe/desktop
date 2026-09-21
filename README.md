@@ -8,7 +8,15 @@ site, so what it shows is always what is deployed.
 - Links on the site stay in the window; links anywhere else, including
   `target="_blank"` ones, open in the player's browser.
 - The site is given no access to Tauri's APIs (`capabilities/default.json`
-  names only the core defaults).
+  names only the core defaults). Don't add `tauri-plugin-dialog`: it
+  replaces `window.confirm` on every page with one that returns a Promise,
+  which htmx takes as "yes".
+- A page that would stop a browser leaving it (the painter, with an unsaved
+  drawing) is asked about before the window closes or the app quits, and the
+  player can stay.
+- On macOS, `alert()`, `confirm()` and the `beforeunload` prompt are native
+  dialogs (`src/macos.rs`). WKWebView shows none of them on its own, and
+  wry's delegate leaves them out.
 
 The site itself is [oeee-cafe/web](https://github.com/oeee-cafe/web); the
 other clients are [oeee-cafe/ios](https://github.com/oeee-cafe/ios) and
@@ -57,9 +65,10 @@ the build goes live on in Steamworks (SteamPipe > Builds).
 
 - **Steam sign-in.** Needs the Steamworks SDK in the app and a server
   endpoint that checks the ticket with `ISteamUserAuth/AuthenticateUserTicket`.
-- **Leaving the painter.** The painter's `beforeunload` guard is not shown by
-  WKWebView, so on macOS a drawing can be lost by clicking the header link or
-  closing the window. Check each platform before release.
+- **Leaving the painter on Windows and Linux.** Tested on macOS only. WebView2
+  and WebKitGTK are expected to show `beforeunload` and `confirm()`
+  themselves, and the close and quit question there goes through `rfd`; none
+  of it has run on either yet.
 - **Downloads.** Saving an image or `.pch` from the site has not been tried in
   the webview.
 - **Icons.** Generated from the 256px `static/favicon.png` in oeee-cafe/web; regenerate from a

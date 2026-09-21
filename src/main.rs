@@ -9,10 +9,17 @@
 //! be reached and says so in words when it cannot, rather than leaving the
 //! webview's own error page on screen.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+
 use tauri::webview::NewWindowResponse;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
+
+#[cfg(target_os = "macos")]
+mod macos;
+mod words;
 
 const SITE: &str = "https://oeee.cafe/";
 
@@ -48,6 +55,111 @@ fn open_in_browser(app: &AppHandle, url: &Url) {
     }
 }
 
+/// Whether the page would stop a browser from leaving it: the page's own
+/// `beforeunload` handlers, asked the way a browser asks them.
+///
+/// Closing a window unloads its page without asking it on any platform, so the
+/// app asks first. Every handler runs for real, so one that did more than
+/// answer -- sent a "goodbye" to a server, say -- would do it here too, though
+/// the player may yet stay. The site's only handler, the painter's, just
+/// answers.
+const WOULD_LOSE_WORK: &str = r#"(function () {
+  var event;
+  try {
+    event = document.createEvent("BeforeUnloadEvent");
+    event.initEvent("beforeunload", false, true);
+  } catch (_) {
+    event = new Event("beforeunload", { cancelable: true });
+  }
+  window.dispatchEvent(event);
+  return event.defaultPrevented ||
+    (typeof event.returnValue === "string" && event.returnValue !== "");
+})()"#;
+
+/// Set while the question is on screen, so a second click on the close
+/// button does not stack a second one behind it.
+static ASKING: AtomicBool = AtomicBool::new(false);
+
+/// Run `then` once the page has agreed to go, asking the player first if it
+/// holds something unsaved.
+pub(crate) fn after_leaving(app: &AppHandle, then: impl FnOnce(&AppHandle) + Send + 'static) {
+    let Some(window) = app.get_webview_window("main") else {
+        return then(app);
+    };
+    if ASKING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    let then = Mutex::new(Some(then));
+    let evaluated = window.eval_with_callback(WOULD_LOSE_WORK, {
+        let app = app.clone();
+        move |answer| {
+            let Some(then) = then.lock().unwrap().take() else {
+                return;
+            };
+            if answer != "true" {
+                ASKING.store(false, Ordering::SeqCst);
+                return then(&app);
+            }
+            let continuation = app.clone();
+            ask_to_leave(&app, move |leave| {
+                ASKING.store(false, Ordering::SeqCst);
+                if leave {
+                    then(&continuation);
+                }
+            });
+        }
+    });
+    if evaluated.is_err() {
+        // A page that cannot be asked cannot answer; do not keep the player.
+        ASKING.store(false, Ordering::SeqCst);
+        let _ = window.destroy();
+    }
+}
+
+/// Ask the player whether to leave anyway, and pass `answer` their choice.
+#[cfg(target_os = "macos")]
+fn ask_to_leave(app: &AppHandle, answer: impl FnOnce(bool) + Send + 'static) {
+    // The same alert the page's own `beforeunload` gets, so leaving by the
+    // close button and leaving by a link ask in the same words.
+    let _ = app.run_on_main_thread(move || answer(macos::confirm_leaving()));
+}
+
+/// Ask the player whether to leave anyway, and pass `answer` their choice.
+#[cfg(not(target_os = "macos"))]
+fn ask_to_leave(app: &AppHandle, answer: impl FnOnce(bool) + Send + 'static) {
+    use rfd::{AsyncMessageDialog, MessageButtons, MessageDialogResult, MessageLevel};
+
+    let window = app.get_webview_window("main");
+    let _ = app.run_on_main_thread(move || {
+        let words = words::words();
+        let mut dialog = AsyncMessageDialog::new()
+            .set_level(MessageLevel::Warning)
+            .set_title(words.leave_title)
+            .set_description(words.leave_body)
+            // Staying is the default, so a reflexive Return keeps the work.
+            .set_buttons(MessageButtons::OkCancelCustom(
+                words.stay.into(),
+                words.leave.into(),
+            ));
+        if let Some(window) = &window {
+            dialog = dialog.set_parent(window);
+        }
+        let shown = dialog.show();
+        // As tauri-plugin-dialog does it: made on the main thread, awaited
+        // off it.
+        std::thread::spawn(move || {
+            let leave = match tauri::async_runtime::block_on(shown) {
+                MessageDialogResult::Custom(label) => label == words.leave,
+                // GTK answers with the slot rather than the label.
+                MessageDialogResult::Cancel => true,
+                _ => false,
+            };
+            answer(leave);
+        });
+    });
+}
+
 fn main() {
     let site = site();
 
@@ -56,13 +168,12 @@ fn main() {
         .setup(move |app| {
             let loader = format!(
                 "index.html?site={}",
-                url::form_urlencoded::byte_serialize(site.as_str().as_bytes())
-                    .collect::<String>()
+                url::form_urlencoded::byte_serialize(site.as_str().as_bytes()).collect::<String>()
             );
             let navigation = (app.handle().clone(), site.clone());
             let new_window = (app.handle().clone(), site.clone());
 
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::App(loader.into()))
+            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(loader.into()))
                 .title("Oeee Cafe")
                 .inner_size(1280.0, 860.0)
                 .min_inner_size(800.0, 600.0)
@@ -89,10 +200,41 @@ fn main() {
                     NewWindowResponse::Deny
                 })
                 .build()?;
+
+            #[cfg(target_os = "macos")]
+            window.with_webview(|webview| unsafe {
+                macos::install_dialogs(&*webview.inner().cast::<objc2_web_kit::WKWebView>());
+            })?;
+            #[cfg(target_os = "macos")]
+            unsafe {
+                macos::guard_quit(app.handle());
+            }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Oeee Cafe");
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let label = window.label().to_owned();
+                after_leaving(window.app_handle(), move |app| {
+                    if let Some(window) = app.get_webview_window(&label) {
+                        let _ = window.destroy();
+                    }
+                });
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building Oeee Cafe")
+        .run(|app, event| {
+            // Quitting (Cmd+Q, the Dock) rather than closing: no code yet
+            // means the player asked for it, and the page has not been asked.
+            if let RunEvent::ExitRequested {
+                code: None, api, ..
+            } = event
+            {
+                api.prevent_exit();
+                after_leaving(app, |app| app.exit(0));
+            }
+        });
 }
 
 #[cfg(test)]
@@ -108,7 +250,10 @@ mod tests {
         let site = url(SITE);
         assert!(stays_in_app(&url("https://oeee.cafe/communities"), &site));
         assert!(stays_in_app(&url("tauri://localhost/index.html"), &site));
-        assert!(stays_in_app(&url("http://tauri.localhost/index.html"), &site));
+        assert!(stays_in_app(
+            &url("http://tauri.localhost/index.html"),
+            &site
+        ));
     }
 
     #[test]
