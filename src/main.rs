@@ -19,6 +19,8 @@ use url::Url;
 
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(windows)]
+mod webview2;
 mod words;
 
 const SITE: &str = "https://oeee.cafe/";
@@ -52,6 +54,32 @@ fn stays_in_app(url: &Url, site: &Url) -> bool {
 fn open_in_browser(app: &AppHandle, url: &Url) {
     if let Err(error) = app.opener().open_url(url.as_str(), None::<&str>) {
         eprintln!("could not open {url} in the browser: {error}");
+    }
+}
+
+/// The browser's own right-click menu -- Back, Reload, Save as, Print -- is the
+/// plainest sign that a window is a browser, so it is kept to where it earns
+/// its place: text fields (Cut, Copy, Paste, spelling), a selection (Copy)
+/// and images (Save, Copy). Anywhere else a right click does nothing, unless
+/// the page has its own use for it, as the painter does; this listens last
+/// and steps aside when the page has already answered.
+const QUIET_CONTEXT_MENU: &str = r#"window.addEventListener("contextmenu", function (event) {
+  if (event.defaultPrevented) return;
+  var target = event.target;
+  if (target && target.closest) {
+    if (target.closest("input, textarea, select, [contenteditable]")) return;
+    if (target.closest("img")) return;
+  }
+  if (window.getSelection && String(window.getSelection()) !== "") return;
+  event.preventDefault();
+});"#;
+
+/// What the window shows before a page has painted, matched to the site's own
+/// background in each theme so a load does not flash white in dark mode.
+fn background(theme: tauri::Theme) -> tauri::window::Color {
+    match theme {
+        tauri::Theme::Dark => tauri::window::Color(0x2c, 0x2c, 0x2c, 0xff),
+        _ => tauri::window::Color(0xff, 0xff, 0xff, 0xff),
     }
 }
 
@@ -177,6 +205,9 @@ fn main() {
                 .title("Oeee Cafe")
                 .inner_size(1280.0, 860.0)
                 .min_inner_size(800.0, 600.0)
+                .initialization_script(QUIET_CONTEXT_MENU)
+                // Edge's address and contact suggestions over form fields.
+                .general_autofill_enabled(false)
                 .on_navigation(move |url| {
                     let (app, site) = &navigation;
                     if stays_in_app(url, site) {
@@ -201,6 +232,13 @@ fn main() {
                 })
                 .build()?;
 
+            if let Ok(theme) = window.theme() {
+                let _ = window.set_background_color(Some(background(theme)));
+            }
+
+            #[cfg(windows)]
+            window.with_webview(|webview| webview2::quiet_the_browser(&webview))?;
+
             #[cfg(target_os = "macos")]
             window.with_webview(|webview| unsafe {
                 macos::install_dialogs(&*webview.inner().cast::<objc2_web_kit::WKWebView>());
@@ -212,6 +250,9 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if let WindowEvent::ThemeChanged(theme) = event {
+                let _ = window.set_background_color(Some(background(*theme)));
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let label = window.label().to_owned();

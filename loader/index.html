@@ -5,20 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Oeee Cafe</title>
     <style>
+      /* The site's own colours (static/style.css in oeee-cafe/web), so the
+         hand-over from this page to the site does not change the screen. */
       :root {
-        --bg: #ffffee;
-        --fg: #800000;
-        --muted: #a05050;
-        --button: #f0e0d6;
-        --border: #d9bfb7;
+        --bg: #ffffff;
+        --fg: #000000;
+        --muted: #595959;
+        --accent: #ef842d;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #1d1f21;
-          --fg: #e8d8c8;
-          --muted: #a89888;
-          --button: #2e3033;
-          --border: #4a4c50;
+          --bg: #2c2c2c;
+          --fg: #e0e0e0;
+          --muted: #a0a0a0;
+          --accent: #ff8c00;
         }
       }
       html,
@@ -32,7 +32,7 @@
         justify-content: center;
         background: var(--bg);
         color: var(--fg);
-        font: 14px/1.5 system-ui, sans-serif;
+        font: 16px/1.5 Arial, Helvetica, sans-serif;
         text-align: center;
       }
       .mark {
@@ -46,12 +46,13 @@
       }
       button {
         margin-top: 12px;
-        padding: 6px 18px;
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        background: var(--button);
-        color: inherit;
+        padding: 5px 14px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #000;
         font: inherit;
+        font-weight: 600;
         cursor: pointer;
       }
       [hidden] {

@@ -14,6 +14,10 @@ site, so what it shows is always what is deployed.
 - A page that would stop a browser leaving it (the painter, with an unsaved
   drawing) is asked about before the window closes or the app quits, and the
   player can stay.
+- The browser shows through as little as it can: no right-click menu except
+  on text fields, selections and images; on Windows, no F5, Ctrl+F, Ctrl+P,
+  autofill suggestions or offer to save a password (`src/webview2.rs`); and
+  a window background matching the site's theme, so a load does not flash.
 - On macOS, `alert()`, `confirm()` and the `beforeunload` prompt are native
   dialogs (`src/macos.rs`). WKWebView shows none of them on its own, and
   wry's delegate leaves them out.

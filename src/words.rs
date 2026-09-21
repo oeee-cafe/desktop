@@ -4,7 +4,11 @@
 //! as every other native dialog on the machine does.
 
 pub struct Words {
+    // Only the macOS `alert()` and `confirm()` panels have buttons of their
+    // own to name; elsewhere the webview draws those.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub ok: &'static str,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub cancel: &'static str,
     pub leave_title: &'static str,
     pub leave_body: &'static str,

@@ -22,6 +22,11 @@ url = "2"
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 rfd = { version = "0.16", default-features = false, features = ["gtk3", "common-controls-v6"] }
 
+# The same versions wry uses, for the WebView2 settings Tauri does not expose.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+windows = "0.61"
+
 # The same versions wry uses, so these are the classes it built its webview
 # from rather than a second copy of them.
 [target.'cfg(target_os = "macos")'.dependencies]
