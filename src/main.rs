@@ -17,6 +17,7 @@ use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, Wind
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
+mod chrome;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(windows)]
@@ -74,12 +75,12 @@ const QUIET_CONTEXT_MENU: &str = r#"window.addEventListener("contextmenu", funct
   event.preventDefault();
 });"#;
 
-/// What the window shows before a page has painted, matched to the site's own
-/// background in each theme so a load does not flash white in dark mode.
+/// What the window shows before a page has painted: the site's ground, the
+/// system's own window grey, in each theme, so a load does not flash.
 fn background(theme: tauri::Theme) -> tauri::window::Color {
     match theme {
-        tauri::Theme::Dark => tauri::window::Color(0x2c, 0x2c, 0x2c, 0xff),
-        _ => tauri::window::Color(0xff, 0xff, 0xff, 0xff),
+        tauri::Theme::Dark => tauri::window::Color(0x1e, 0x1e, 0x1e, 0xff),
+        _ => tauri::window::Color(0xec, 0xec, 0xec, 0xff),
     }
 }
 
@@ -198,14 +199,35 @@ fn main() {
                 "index.html?site={}",
                 url::form_urlencoded::byte_serialize(site.as_str().as_bytes()).collect::<String>()
             );
+            // The site may drag and maximise the window from its toolbar, and
+            // do nothing else with it.
+            app.add_capability(
+                tauri::ipc::CapabilityBuilder::new("site")
+                    .remote(chrome::site_pattern(&site))
+                    .window("main")
+                    .permission("core:window:allow-start-dragging")
+                    .permission("core:window:allow-internal-toggle-maximize"),
+            )?;
+
             let navigation = (app.handle().clone(), site.clone());
             let new_window = (app.handle().clone(), site.clone());
 
-            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(loader.into()))
+            let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(loader.into()))
                 .title("Oeee Cafe")
                 .inner_size(1280.0, 860.0)
                 .min_inner_size(800.0, 600.0)
                 .initialization_script(QUIET_CONTEXT_MENU)
+                .initialization_script(chrome::script(std::env::consts::OS));
+            // The title bar goes transparent and the traffic lights move into
+            // the site's toolbar. The position is to the buttons' top-left
+            // corner, not their centre: they are 14px tall and the toolbar
+            // 52, so 19 from the top lines them up with its tabs.
+            #[cfg(target_os = "macos")]
+            let builder = builder
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true)
+                .traffic_light_position(tauri::LogicalPosition::new(20.0, 19.0));
+            let window = builder
                 // Edge's address and contact suggestions over form fields.
                 .general_autofill_enabled(false)
                 .on_navigation(move |url| {
