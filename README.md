@@ -1,0 +1,67 @@
+# Oeee Cafe for Steam
+
+A Tauri app that opens oeee.cafe in its own window. It holds no copy of the
+site, so what it shows is always what is deployed.
+
+- It opens on `loader/index.html`, which checks the site answers and shows a
+  "can't be reached" page with a retry button when it does not.
+- Links on the site stay in the window; links anywhere else, including
+  `target="_blank"` ones, open in the player's browser.
+- The site is given no access to Tauri's APIs (`capabilities/default.json`
+  names only the core defaults).
+
+It is its own Cargo workspace, so the server's `cargo` commands never build
+it, and `.dockerignore` keeps it out of the server image.
+
+## Running it
+
+```bash
+cargo install tauri-cli --version "^2" --locked   # once
+cargo run                                         # against oeee.cafe
+OEEE_CAFE_URL=https://oeee.test/ cargo run        # against a local server
+cargo test
+```
+
+## Building for Steam
+
+Bundles are built on the platform they are for:
+
+```bash
+cargo tauri build
+```
+
+| Platform | Bundle | What goes in `steam/content/<platform>/` |
+| --- | --- | --- |
+| Windows | `target/release/oeee-cafe-desktop.exe` | the `.exe` alone; WebView2 ships with Windows 10 and 11 |
+| macOS | `target/release/bundle/macos/Oeee Cafe.app` | the `.app` |
+| Linux | `target/release/bundle/appimage/*.AppImage` | the AppImage |
+
+Steam installs files; it does not run installers, so ship the executable
+(Windows) and the `.app` (macOS) rather than the NSIS installer or a `.dmg`.
+Set each depot's launch option in Steamworks (Installation > General) to the
+file inside it.
+
+Then upload:
+
+```bash
+STEAM_APP_ID=... STEAM_USER=... \
+STEAM_DEPOT_WINDOWS=... STEAM_DEPOT_MACOS=... STEAM_DEPOT_LINUX=... \
+./steam/upload.sh "0.1.0"
+```
+
+`steamcmd` asks for the password and Steam Guard code itself. Pick the branch
+the build goes live on in Steamworks (SteamPipe > Builds).
+
+## Not done yet
+
+- **Steam sign-in.** Needs the Steamworks SDK in the app and a server
+  endpoint that checks the ticket with `ISteamUserAuth/AuthenticateUserTicket`.
+- **Leaving the painter.** The painter's `beforeunload` guard is not shown by
+  WKWebView, so on macOS a drawing can be lost by clicking the header link or
+  closing the window. Check each platform before release.
+- **Downloads.** Saving an image or `.pch` from the site has not been tried in
+  the webview.
+- **Icons.** Generated from the 256px `static/favicon.png`; regenerate from a
+  1024px source with `cargo tauri icon <file>` before release.
+- **macOS signing and notarisation**, needed for the `.app` to open without a
+  Gatekeeper warning.

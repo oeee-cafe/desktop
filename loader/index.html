@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oeee Cafe</title>
+    <style>
+      :root {
+        --bg: #ffffee;
+        --fg: #800000;
+        --muted: #a05050;
+        --button: #f0e0d6;
+        --border: #d9bfb7;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1d1f21;
+          --fg: #e8d8c8;
+          --muted: #a89888;
+          --button: #2e3033;
+          --border: #4a4c50;
+        }
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        color: var(--fg);
+        font: 14px/1.5 system-ui, sans-serif;
+        text-align: center;
+      }
+      .mark {
+        font-size: 48px;
+      }
+      p {
+        margin: 8px 0;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      button {
+        margin-top: 12px;
+        padding: 6px 18px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--button);
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+      [hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark">🥒</div>
+      <p id="connecting" class="muted"></p>
+      <div id="offline" hidden>
+        <p id="offline-title"></p>
+        <p id="offline-body" class="muted"></p>
+        <button id="retry" type="button"></button>
+      </div>
+    </main>
+    <script>
+      // The app opens here, not on the site: a site that cannot be reached
+      // would otherwise leave the webview's own error page on screen, which
+      // differs on every platform and offers no way to try again.
+      var WORDS = {
+        en: {
+          connecting: "Connecting to Oeee Cafe…",
+          title: "Oeee Cafe can't be reached.",
+          body: "Check your internet connection and try again.",
+          retry: "Try again",
+        },
+        ko: {
+          connecting: "오이카페에 연결하는 중…",
+          title: "오이카페에 연결할 수 없습니다.",
+          body: "인터넷 연결을 확인한 뒤 다시 시도해 주세요.",
+          retry: "다시 시도",
+        },
+        ja: {
+          connecting: "OEEEカフェに接続しています…",
+          title: "OEEEカフェに接続できません。",
+          body: "インターネット接続を確認して、もう一度お試しください。",
+          retry: "再試行",
+        },
+        zh: {
+          connecting: "正在连接黄瓜咖啡馆…",
+          title: "无法连接黄瓜咖啡馆。",
+          body: "请检查网络连接后重试。",
+          retry: "重试",
+        },
+      };
+      var language = (navigator.language || "en").slice(0, 2);
+      var words = WORDS[language] || WORDS.en;
+
+      document.getElementById("connecting").textContent = words.connecting;
+      document.getElementById("offline-title").textContent = words.title;
+      document.getElementById("offline-body").textContent = words.body;
+      document.getElementById("retry").textContent = words.retry;
+
+      var site =
+        new URLSearchParams(location.search).get("site") || "https://oeee.cafe/";
+
+      function connect() {
+        document.getElementById("connecting").hidden = false;
+        document.getElementById("offline").hidden = true;
+        // `no-cors` resolves on any answer from the server and rejects only
+        // when nothing answered, which is exactly the question here.
+        fetch(site, { mode: "no-cors", cache: "no-store" })
+          .then(function () {
+            location.replace(site);
+          })
+          .catch(function () {
+            document.getElementById("connecting").hidden = true;
+            document.getElementById("offline").hidden = false;
+          });
+      }
+
+      document.getElementById("retry").addEventListener("click", connect);
+      window.addEventListener("online", connect);
+      connect();
+    </script>
+  </body>
+</html>

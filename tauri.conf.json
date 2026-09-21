@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Oeee Cafe",
+  "version": "0.1.0",
+  "identifier": "cafe.oeee.desktop",
+  "build": {
+    "frontendDist": "loader"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "nsis", "appimage"],
+    "category": "GraphicsAndDesign",
+    "copyright": "Oeee Cafe",
+    "shortDescription": "Draw oekaki with everyone on Oeee Cafe",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
