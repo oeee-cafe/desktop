@@ -22,7 +22,7 @@ pub fn script(os: &str) -> String {
   var root = document.documentElement;
   root.setAttribute("data-desktop", "{os}");
   var style = document.createElement("style");
-  style.textContent = 'html[data-desktop="macos"] .nav-bar #menubar {{ padding-left: 84px; }}';
+  style.textContent = 'html[data-desktop="macos"] .nav-bar #menubar {{ padding-left: 96px; }}';
   (document.head || root).appendChild(style);
   function mark() {{
     var bar = document.querySelector(".nav-bar");

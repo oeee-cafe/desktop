@@ -20,6 +20,9 @@ use url::Url;
 mod chrome;
 #[cfg(target_os = "macos")]
 mod macos;
+mod menu;
+#[cfg(target_os = "macos")]
+mod menu_words;
 #[cfg(windows)]
 mod webview2;
 mod words;
@@ -191,8 +194,10 @@ fn ask_to_leave(app: &AppHandle, answer: impl FnOnce(bool) + Send + 'static) {
 
 fn main() {
     let site = site();
+    let menu_site = site.clone();
 
     tauri::Builder::default()
+        .on_menu_event(move |app, event| menu::handle(app, event, &menu_site))
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             let loader = format!(
@@ -219,9 +224,10 @@ fn main() {
                 .initialization_script(QUIET_CONTEXT_MENU)
                 .initialization_script(chrome::script(std::env::consts::OS));
             // The title bar goes transparent and the traffic lights move into
-            // the site's toolbar. The position is to the buttons' top-left
-            // corner, not their centre: they are 14px tall and the toolbar
-            // 52, so 19 from the top lines them up with its tabs.
+            // the site's toolbar. wry keeps the buttons where the system put
+            // them inside a title bar it makes `y` taller, so their centre
+            // lands 2.5pt above `y`, measured: 28.5 centres them at 26, the
+            // middle of the 52pt toolbar and of its tabs.
             #[cfg(target_os = "macos")]
             let builder = builder
                 .title_bar_style(tauri::TitleBarStyle::Overlay)
@@ -229,7 +235,7 @@ fn main() {
                 // A force click on a link opens WebKit's preview of the page,
                 // which is a browser's gesture, not an application's.
                 .allow_link_preview(false)
-                .traffic_light_position(tauri::LogicalPosition::new(20.0, 19.0));
+                .traffic_light_position(tauri::LogicalPosition::new(20.0, 28.5));
             let window = builder
                 // Edge's address and contact suggestions over form fields.
                 .general_autofill_enabled(false)
@@ -272,6 +278,10 @@ fn main() {
             unsafe {
                 macos::guard_quit(app.handle());
             }
+            // The menu bar is macOS's; on Windows and Linux a menu would sit
+            // in a bar under the title bar, and the site's own keys serve.
+            #[cfg(target_os = "macos")]
+            app.set_menu(menu::build(app.handle())?)?;
             Ok(())
         })
         .on_window_event(|window, event| {
