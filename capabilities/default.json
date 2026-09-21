@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The bundled loader page only. oeee.cafe itself is given no access to Tauri.",
+  "description": "The bundled loader page only: its strip where the toolbar will be drags the window. oeee.cafe itself is given no access to Tauri here.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
 }
