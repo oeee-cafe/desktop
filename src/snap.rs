@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::OnceLock;
 
 use serde::Deserialize;
-use tauri::WebviewWindow;
+use tauri::{Listener, Manager, WebviewWindow};
 use windows::core::w;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -78,8 +78,19 @@ thread_local! {
     static PRESSED: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Makes the stand-in, hidden until the page says where its button is.
+/// Makes the stand-in, hidden until the page says where its button is, and
+/// keeps it over the button wherever the page says it is.
 pub fn attach(window: &WebviewWindow) -> tauri::Result<()> {
+    make_stand_in(window)?;
+    let app = window.app_handle().clone();
+    window.app_handle().listen_any(EVENT, move |event| {
+        let place = parse(event.payload());
+        let _ = app.run_on_main_thread(move || self::place(place));
+    });
+    Ok(())
+}
+
+fn make_stand_in(window: &WebviewWindow) -> tauri::Result<()> {
     let parent = window.hwnd()?;
     let _ = WINDOW.set(window.clone());
     unsafe {

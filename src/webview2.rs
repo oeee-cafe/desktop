@@ -55,7 +55,20 @@ unsafe fn take_string(get: impl FnOnce(*mut PWSTR) -> windows::core::Result<()>)
     Ok(text)
 }
 
-pub fn quiet_the_browser(webview: &tauri::webview::PlatformWebview) {
+/// Quiets the browser, and hands the app the page's dialogs and the
+/// right-click menu. The keys (keys.rs) and the pages that fail (offline.rs)
+/// are attached by their own features.
+pub fn attach(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use tauri::Manager;
+    let app = window.app_handle().clone();
+    window.with_webview(move |webview| {
+        quiet_the_browser(&webview);
+        on_script_dialogs(&webview, app);
+        on_context_menu(&webview, crate::words::words());
+    })
+}
+
+fn quiet_the_browser(webview: &tauri::webview::PlatformWebview) {
     unsafe {
         let Ok(core) = webview.controller().CoreWebView2() else {
             return;
@@ -171,7 +184,7 @@ impl<T> OnWindowThread<T> {
 /// system's dialogs (dialogs.rs) instead of WebView2's "oeee.cafe says". The
 /// page waits, as it would for the browser's, until the player answers.
 /// `prompt()`, which the site never asks, answers as cancelled.
-pub fn on_script_dialogs(webview: &tauri::webview::PlatformWebview, app: tauri::AppHandle) {
+fn on_script_dialogs(webview: &tauri::webview::PlatformWebview, app: tauri::AppHandle) {
     unsafe {
         let Ok(core) = webview.controller().CoreWebView2() else {
             return;
@@ -219,7 +232,7 @@ unsafe fn message(args: &ICoreWebView2ScriptDialogOpeningEventArgs) -> windows::
 
 /// Trims WebView2's right-click menu to what a program's would have
 /// (context_menu.rs), and puts Copy link first on a link.
-pub fn on_context_menu(webview: &tauri::webview::PlatformWebview, words: &'static Words) {
+fn on_context_menu(webview: &tauri::webview::PlatformWebview, words: &'static Words) {
     unsafe {
         let Ok(core) = webview.controller().CoreWebView2() else {
             return;

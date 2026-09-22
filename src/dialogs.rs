@@ -3,18 +3,19 @@
 //! Closing the window over a drawing always asked this way. The page's own
 //! `alert()`, `confirm()` and leaving a page with unsaved work were left to
 //! WebView2, which draws them as a browser does -- titled "oeee.cafe says",
-//! in the browser's words -- and the Steam sign-in failure is an `alert()`.
-//! webview2.rs hands those here instead.
+//! in the browser's words. webview2.rs hands those here instead. The Steam
+//! sign-in failure is asked here directly (steam.rs).
 
 use rfd::{AsyncMessageDialog, MessageButtons, MessageDialogResult, MessageLevel};
 use tauri::{AppHandle, Manager};
 
 use crate::words;
 
-/// What the window asks. Only WebView2 hands over the page's own (webview2.rs).
+/// What the window asks. Only WebView2 hands over the page's own (webview2.rs);
+/// elsewhere an alert is only ever the app's.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub enum Question {
-    /// The page's `alert()`: something to read, and OK.
+    /// Something to read, and OK: the page's `alert()`, or the app's own.
     Alert(String),
     /// The page's `confirm()`: OK or Cancel.
     Confirm(String),
@@ -26,7 +27,7 @@ pub enum Question {
 /// agreed: OK, or Leave. Made on the main thread, as tauri-plugin-dialog makes
 /// its dialogs, and awaited off it.
 pub fn ask(app: &AppHandle, question: Question, answer: impl FnOnce(bool) + Send + 'static) {
-    let window = app.get_webview_window("main");
+    let window = app.get_webview_window(crate::WINDOW);
     let _ = app.run_on_main_thread(move || {
         let words = words::words();
         let dialog = AsyncMessageDialog::new();

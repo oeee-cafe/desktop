@@ -1,0 +1,12 @@
+{"v":1,"type":"page","path":"/feed","signedIn":true,"presence":null,"community":null,"group":null,"painting":false,"refreshable":true}
+{"v":1,"type":"theme","choice":"system","dark":false,"top":"rgba(250, 250, 252, 0.85)","bottom":"rgb(255, 255, 255)"}
+{"v":1,"type":"unread","count":12}
+{"v":1,"type":"pressed","drawing":{"src":"https://r2.oeee.cafe/image/9c/9c881320.png","link":"https://oeee.cafe/@artist/9c881320-2b43-4afa-b2bb-7128c8a3e985","width":300,"height":300}}
+{"v":1,"type":"haptic","name":"success"}
+{"v":1,"type":"painter","state":"ready"}
+{"v":1,"type":"page","path":"/painter","signedIn":true,"presence":"collaborating","community":null,"group":"0123456789abcdef","painting":true,"refreshable":false}
+{"v":1,"type":"theme","choice":"dark","dark":true,"top":"rgb(34, 34, 63)","bottom":"rgb(34, 34, 63)"}
+{"v":1,"type":"unread","count":0}
+{"v":1,"type":"page","path":"/signedout","signedIn":false,"presence":"watching-replay","community":"오이카페 \"모에화\"","group":null,"painting":false,"refreshable":false}
+{"v":1,"type":"theme","choice":"system","dark":false,"top":null,"bottom":null}
+{"v":1,"type":"page","path":"/bare","signedIn":null,"presence":null,"community":null,"group":null,"painting":false,"refreshable":true}
