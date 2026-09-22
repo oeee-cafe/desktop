@@ -22,9 +22,22 @@ site, so what it shows is always what is deployed.
   (`src/downloads.rs`). A `.pch` replay is never handed over: not as a
   download, and not as a link for the browser to download.
 - The browser shows through as little as it can: no right-click menu except
-  on text fields, selections and images; on Windows, no F5, Ctrl+F, Ctrl+P,
-  autofill suggestions or offer to save a password (`src/webview2.rs`); and
-  a window background matching the site's theme, so a load does not flash.
+  on text fields, selections and images; on Windows, no browser find bar,
+  print preview, autofill suggestions or offer to save a password
+  (`src/webview2.rs`); and a window background matching the site's theme,
+  so a load does not flash.
+- On Windows the right-click menu is WebView2's trimmed to what a program's
+  has -- Cut, Copy, Paste and spelling in a field, Copy on a selection, Save
+  and Copy on a picture -- and a link's is the app's own Copy link
+  (`src/context_menu.rs`). The page's `alert()`, `confirm()` and leaving a
+  page with unsaved work are the system's dialogs, as closing the window is
+  (`src/dialogs.rs`), not WebView2's "oeee.cafe says".
+- On Windows the keys a program answers to are the app's (`src/keys.rs`):
+  Alt+Left and Alt+Right, F5 and Ctrl+R, the keyboard's Back, Forward and
+  Refresh keys, and Ctrl+W, which asks over a drawing as the close button
+  does. Ctrl+F is the site's search, Ctrl+N a new drawing, Ctrl+, the
+  account page, Ctrl+1 to Ctrl+5 the site's sections and Ctrl+/ its list of
+  shortcuts.
 - On Windows the site's toolbar is the title bar: the window has none of its
   own, and minimise, maximise and close are drawn at the toolbar's end
   (`src/caption.js`), with Snap Layouts on maximise (`src/snap.rs`).
@@ -184,6 +197,13 @@ changing it.
   through `rfd`'s GTK dialogs, as on Windows through its own. A page that
   fails mid-session is not caught there (`src/offline.rs` watches WebView2
   only), so it shows WebKitGTK's error page.
+- **The keys, dialogs and right-click menu on Windows.** Type-checked and
+  unit-tested from macOS (`cargo check --target x86_64-pc-windows-msvc`),
+  not yet run. Worth trying: Alt+Left and Ctrl+R over an unsaved drawing
+  (the system's leave question, then the right page), `alert()` from the
+  Steam sign-in failure, and the menu on a drawing, a link, a field with a
+  misspelling and empty space (none). The mouse's back and forward buttons
+  were not looked at.
 - **Leaving the real painter.** On Windows, leaving and closing were tried on
   a page with the painter's `beforeunload` handler, not in the painter
   itself, signed in.

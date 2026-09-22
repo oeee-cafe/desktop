@@ -19,7 +19,13 @@ use url::Url;
 
 mod badge;
 mod chrome;
+// The right-click menu and the keys are WebView2's to hand over (webview2.rs).
+#[cfg_attr(not(windows), allow(dead_code))]
+mod context_menu;
+mod dialogs;
 mod downloads;
+#[cfg_attr(not(windows), allow(dead_code))]
+mod keys;
 mod offline;
 #[cfg(windows)]
 mod snap;
@@ -68,16 +74,25 @@ fn open_in_browser(app: &AppHandle, url: &Url) {
 /// and images (Save, Copy). Anywhere else a right click does nothing, unless
 /// the page has its own use for it, as the painter does; this listens last
 /// and steps aside when the page has already answered.
-const QUIET_CONTEXT_MENU: &str = r#"window.addEventListener("contextmenu", function (event) {
+///
+/// On Windows a link is let through too: there the menu is trimmed to those
+/// same items and a link's is the app's Copy link (context_menu.rs). Elsewhere
+/// a link's menu would be the browser's, opening windows the app does not have.
+fn quiet_context_menu(os: &str) -> String {
+    let links = if os == "windows" { "a[href], " } else { "" };
+    format!(
+        r#"window.addEventListener("contextmenu", function (event) {{
   if (event.defaultPrevented) return;
   var target = event.target;
-  if (target && target.closest) {
+  if (target && target.closest) {{
     if (target.closest("input, textarea, select, [contenteditable]")) return;
-    if (target.closest("img")) return;
-  }
+    if (target.closest("{links}img")) return;
+  }}
   if (window.getSelection && String(window.getSelection()) !== "") return;
   event.preventDefault();
-});"#;
+}});"#
+    )
+}
 
 /// What the window shows before a page has painted: the site's ground, which
 /// is NEO's -- lavender, or its night blue -- so a load does not flash.
@@ -152,37 +167,25 @@ fn after_leaving(app: &AppHandle, then: impl FnOnce(&AppHandle) + Send + 'static
 
 /// Ask the player whether to leave anyway, and pass `answer` their choice.
 fn ask_to_leave(app: &AppHandle, answer: impl FnOnce(bool) + Send + 'static) {
-    use rfd::{AsyncMessageDialog, MessageButtons, MessageDialogResult, MessageLevel};
+    dialogs::ask(app, dialogs::Question::Leave, answer);
+}
 
-    let window = app.get_webview_window("main");
-    let _ = app.run_on_main_thread(move || {
-        let words = words::words();
-        let mut dialog = AsyncMessageDialog::new()
-            .set_level(MessageLevel::Warning)
-            .set_title(words.leave_title)
-            .set_description(words.leave_body)
-            // Staying is the default, so a reflexive Return keeps the work.
-            .set_buttons(MessageButtons::OkCancelCustom(
-                words.stay.into(),
-                words.leave.into(),
-            ));
-        if let Some(window) = &window {
-            dialog = dialog.set_parent(window);
+/// Carries out one of the window's keys (keys.rs) in the page showing. Going
+/// back, forward or reloading is the page's own, so a page holding a drawing
+/// asks first; closing asks as the close button does.
+#[cfg(windows)]
+fn act(window: &tauri::WebviewWindow, site: &Url, action: keys::Action) {
+    let script = match action {
+        keys::Action::Back => "history.back();".to_owned(),
+        keys::Action::Forward => "history.forward();".to_owned(),
+        keys::Action::Reload => "location.reload();".to_owned(),
+        keys::Action::Close => {
+            let _ = window.close();
+            return;
         }
-        let shown = dialog.show();
-        // As tauri-plugin-dialog does it: made on the main thread, awaited
-        // off it.
-        std::thread::spawn(move || {
-            // Only the Leave button leaves. Esc and the dialog's close box
-            // answer Cancel, and a player dismissing the question has not
-            // agreed to lose their drawing.
-            let leave = matches!(
-                tauri::async_runtime::block_on(shown),
-                MessageDialogResult::Custom(label) if label == words.leave
-            );
-            answer(leave);
-        });
-    });
+        keys::Action::Command(name) => keys::command_script(name, site),
+    };
+    let _ = window.eval(script);
 }
 
 /// Gets a ticket from Steam and posts it to the site from the page showing,
@@ -287,7 +290,7 @@ fn main() {
                 .title("Oeee Cafe")
                 .inner_size(1280.0, 860.0)
                 .min_inner_size(800.0, 600.0)
-                .initialization_script(QUIET_CONTEXT_MENU)
+                .initialization_script(quiet_context_menu(std::env::consts::OS))
                 .initialization_script(chrome::script(std::env::consts::OS))
                 .initialization_script(offline::page_script());
             let builder = match steam {
@@ -380,6 +383,18 @@ fn main() {
             #[cfg(windows)]
             window.with_webview(|webview| webview2::quiet_the_browser(&webview))?;
 
+            // The keys a program answers to, the page's dialogs as the
+            // system's, and a right-click menu without the browser in it.
+            #[cfg(windows)]
+            {
+                let (keys_window, keys_site, dialogs_app) = (window.clone(), site.clone(), app.handle().clone());
+                window.with_webview(move |webview| {
+                    webview2::on_keys(&webview, move |action| act(&keys_window, &keys_site, action));
+                    webview2::on_script_dialogs(&webview, dialogs_app);
+                    webview2::on_context_menu(&webview, words::words());
+                })?;
+            }
+
             // A page of the site that could not be reached goes back to the
             // loader, which says so and tries it again (offline.rs).
             #[cfg(windows)]
@@ -450,6 +465,12 @@ mod tests {
             &url("http://tauri.localhost/index.html"),
             &site
         ));
+    }
+
+    #[test]
+    fn links_get_a_menu_only_where_it_is_the_apps() {
+        assert!(quiet_context_menu("windows").contains(r#"closest("a[href], img")"#));
+        assert!(quiet_context_menu("linux").contains(r#"closest("img")"#));
     }
 
     #[test]
