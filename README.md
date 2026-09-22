@@ -187,6 +187,21 @@ Import-Certificate -FilePath (Export-Certificate $cert -FilePath dev.cer).FullNa
 .\msstore\package.ps1 -Pfx dev.pfx
 ```
 
+With Developer Mode on, the unpacked package can be tried without a
+certificate: register its folder, open it from Start, and remove it after.
+
+```powershell
+Add-AppxPackage -Register target\msstore\layout-x64\AppxManifest.xml
+Get-AppxPackage -Name $env:MSSTORE_IDENTITY_NAME | Remove-AppxPackage
+```
+
+Packaged, the app keeps WebView2's data and the window's place in the
+package's own folder (`%LOCALAPPDATA%\Packages\<family>\LocalCache\`), so
+uninstalling takes them with it -- unless `%LOCALAPPDATA%\cafe.oeee.desktop`
+already exists, as it does where the app has run unpackaged: Windows lets
+a package change folders it finds there, so on a development machine it
+shares them with `cargo run` and the Steam build.
+
 The images come from `icons/icon.png`; run `msstore/assets.sh` again after
 changing it.
 
@@ -207,8 +222,9 @@ changing it.
 - **Leaving the real painter.** On Windows, leaving and closing were tried on
   a page with the painter's `beforeunload` handler, not in the painter
   itself, signed in.
-- **The MSIX.** `msstore/package.ps1` has not run yet; nor has the
-  app, packaged, on Windows or Windows on ARM (WebView2's data under the
-  package's virtualised `%LOCALAPPDATA%`, the taskbar icons, the unread dot).
+- **The MSIX.** The x64 package has been packed, registered unsigned and
+  run from Start. Not yet: the ARM64 package (it needs Visual Studio's ARM64
+  build tools), a signed install, a Store submission, and a look at the
+  taskbar icon and the unread dot in the packaged app.
 - **Icons.** Generated from the 256px `static/favicon.png` in oeee-cafe/web; regenerate from a
   1024px source with `cargo tauri icon <file>` before release.

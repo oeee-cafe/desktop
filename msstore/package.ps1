@@ -53,6 +53,10 @@ function SdkTool([string]$exe) {
 }
 
 function Run([string]$exe) {
+  # Cargo and the SDK tools write progress to stderr, which Windows
+  # PowerShell turns into a terminating error under 'Stop' whenever the
+  # output is captured (a CI log, a pipe); the exit code is what says.
+  $ErrorActionPreference = 'Continue'
   & $exe @args
   if ($LASTEXITCODE -ne 0) { throw "$(Split-Path -Leaf $exe) failed ($LASTEXITCODE)" }
 }
@@ -80,6 +84,14 @@ $template = $template.Replace('$VERSION$', $packageVersion)
 $priconfig = Join-Path $out 'priconfig.xml'
 New-Item $out -ItemType Directory -Force | Out-Null
 Run $makepri 'createconfig' '/cf' $priconfig '/dq' 'en-US' '/pv' '10.0.0' '/o'
+# makepri's config splits each scale and language out into a resource
+# package of its own, which this one package would not carry: the 200% and
+# 400% images would be left out of its index, and a high-DPI display shown
+# the 100% ones stretched. Everything stays in the one index instead.
+$config = [xml](Get-Content $priconfig -Raw)
+$packaging = $config.SelectSingleNode('//packaging')
+if ($packaging) { [void]$packaging.ParentNode.RemoveChild($packaging) }
+$config.Save($priconfig)
 
 # One package per architecture, all in one folder for the bundle.
 $packages = Join-Path $out 'packages'
