@@ -14,6 +14,8 @@ pub struct Words {
     pub leave_body: &'static str,
     pub leave: &'static str,
     pub stay: &'static str,
+    /// Steam did not hand over a sign-in ticket.
+    pub steam_sign_in_failed: &'static str,
 }
 
 const EN: Words = Words {
@@ -23,6 +25,7 @@ const EN: Words = Words {
     leave_body: "Anything you have not saved will be lost.",
     leave: "Leave",
     stay: "Stay",
+    steam_sign_in_failed: "Steam could not sign you in. Make sure Steam is running and try again.",
 };
 
 const KO: Words = Words {
@@ -32,6 +35,7 @@ const KO: Words = Words {
     leave_body: "저장하지 않은 내용은 사라집니다.",
     leave: "떠나기",
     stay: "머무르기",
+    steam_sign_in_failed: "Steam으로 로그인하지 못했습니다. Steam이 실행 중인지 확인하고 다시 시도해 주세요.",
 };
 
 const JA: Words = Words {
@@ -41,6 +45,7 @@ const JA: Words = Words {
     leave_body: "保存していない内容は失われます。",
     leave: "離れる",
     stay: "とどまる",
+    steam_sign_in_failed: "Steamでログインできませんでした。Steamが起動しているか確認して、もう一度お試しください。",
 };
 
 const ZH: Words = Words {
@@ -50,6 +55,7 @@ const ZH: Words = Words {
     leave_body: "未保存的内容将会丢失。",
     leave: "离开",
     stay: "留下",
+    steam_sign_in_failed: "无法通过 Steam 登录。请确认 Steam 正在运行，然后重试。",
 };
 
 pub fn words() -> &'static Words {

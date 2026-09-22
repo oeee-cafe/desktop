@@ -22,6 +22,7 @@ mod chrome;
 #[cfg(target_os = "macos")]
 mod macos;
 mod menu;
+mod steam;
 #[cfg(target_os = "macos")]
 mod menu_words;
 #[cfg(windows)]
@@ -193,7 +194,29 @@ fn ask_to_leave(app: &AppHandle, answer: impl FnOnce(bool) + Send + 'static) {
     });
 }
 
+/// Gets a ticket from Steam and posts it to the site from the page showing,
+/// or tells the player it could not. Off the main thread: Steam can take a
+/// moment to answer.
+fn sign_in_with_steam(app: &AppHandle, steam: std::sync::Arc<steam::Steam>, next: Option<String>) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
+        let script = match steam.web_api_ticket() {
+            Ok(ticket) => steam::post_ticket_script(&ticket, next.as_deref()),
+            Err(error) => {
+                eprintln!("no Steam ticket: {error}");
+                steam::failed_script(words::words().steam_sign_in_failed)
+            }
+        };
+        let _ = window.eval(script);
+    });
+}
+
 fn main() {
+    // Before any window, as Steam asks, so its overlay can find them.
+    let steam = steam::start();
     let site = site();
     let menu_site = site.clone();
 
@@ -244,7 +267,7 @@ fn main() {
                     .permission("core:event:allow-emit"),
             )?;
 
-            let navigation = (app.handle().clone(), site.clone());
+            let navigation = (app.handle().clone(), site.clone(), steam.clone());
             let new_window = (app.handle().clone(), site.clone());
 
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(loader.into()))
@@ -253,6 +276,10 @@ fn main() {
                 .min_inner_size(800.0, 600.0)
                 .initialization_script(QUIET_CONTEXT_MENU)
                 .initialization_script(chrome::script(std::env::consts::OS));
+            let builder = match steam {
+                Some(_) => builder.initialization_script(steam::MARK_PAGE),
+                None => builder,
+            };
             // The title bar goes transparent and the traffic lights move into
             // the site's toolbar. wry keeps the buttons where the system put
             // them inside a title bar it makes `y` taller, so their centre
@@ -276,7 +303,11 @@ fn main() {
                 // Edge's address and contact suggestions over form fields.
                 .general_autofill_enabled(false)
                 .on_navigation(move |url| {
-                    let (app, site) = &navigation;
+                    let (app, site, steam) = &navigation;
+                    if let (Some(steam), Some(next)) = (steam, steam::sign_in_link(url, site)) {
+                        sign_in_with_steam(app, steam.clone(), next);
+                        return false;
+                    }
                     if stays_in_app(url, site) {
                         return true;
                     }

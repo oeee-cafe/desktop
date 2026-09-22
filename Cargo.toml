@@ -19,6 +19,8 @@ tauri-plugin-window-state = "2"
 tauri-plugin-single-instance = "2"
 sys-locale = "0.3"
 url = "2"
+steamworks = "0.13.1"
+serde_json = "1"
 
 # What tauri-plugin-dialog shows its dialogs with, without the plugin: it
 # replaces `window.confirm` in every page, the site's included, with one that

@@ -22,6 +22,26 @@ site, so what it shows is always what is deployed.
   dialogs (`src/macos.rs`). WKWebView shows none of them on its own, and
   wry's delegate leaves them out.
 
+## Signing in with Steam
+
+Started by Steam, the app marks every page `data-steam-app`, and the site's
+sign-in page shows "Sign in with Steam" (the account page, "Link your Steam
+account"). That link goes to `/auth/steam/app`. The app stops the
+navigation, asks Steam for a Web API ticket (`GetAuthTicketForWebApi`, with
+the identity `oeee-cafe`) and posts it to `/auth/steam` from the page, as a
+form on the page would. The site checks it with Steam itself, so the app is
+trusted with nothing (`src/steam.rs`).
+
+Without Steam, the app starts as before and the link never shows. Steam's
+library still has to be beside the binary: the app links it and will not
+start without it. `build.rs` puts it in `target/<profile>/`, and
+`tauri.conf.json` puts it in the macOS and Linux bundles; see the table below
+for Windows. The copies in `steam/redistributable/` are the ones the
+`steamworks` crate was built against; replace them together with it.
+
+To have Steam start a development build, put the app id in a
+`steam_appid.txt` in the directory you run it from.
+
 The site itself is [oeee-cafe/web](https://github.com/oeee-cafe/web); the
 other clients are [oeee-cafe/ios](https://github.com/oeee-cafe/ios) and
 [oeee-cafe/android](https://github.com/oeee-cafe/android).
@@ -45,7 +65,7 @@ cargo tauri build
 
 | Platform | Bundle | What goes in `steam/content/<platform>/` |
 | --- | --- | --- |
-| Windows | `target/release/oeee-cafe-desktop.exe` | the `.exe` alone; WebView2 ships with Windows 10 and 11 |
+| Windows | `target/release/oeee-cafe-desktop.exe` | the `.exe` and `steam/redistributable/win64/steam_api64.dll` beside it; WebView2 ships with Windows 10 and 11 |
 | macOS | `target/release/bundle/macos/Oeee Cafe.app` | the `.app` |
 | Linux | `target/release/bundle/appimage/*.AppImage` | the AppImage |
 
@@ -67,8 +87,6 @@ the build goes live on in Steamworks (SteamPipe > Builds).
 
 ## Not done yet
 
-- **Steam sign-in.** Needs the Steamworks SDK in the app and a server
-  endpoint that checks the ticket with `ISteamUserAuth/AuthenticateUserTicket`.
 - **Leaving the painter on Windows and Linux.** Tested on macOS only. WebView2
   and WebKitGTK are expected to show `beforeunload` and `confirm()`
   themselves, and the close and quit question there goes through `rfd`; none
