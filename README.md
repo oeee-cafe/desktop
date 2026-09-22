@@ -119,12 +119,50 @@ STEAM_DEPOT_WINDOWS=... STEAM_DEPOT_MACOS=... STEAM_DEPOT_LINUX=... \
 `steamcmd` asks for the password and Steam Guard code itself. Pick the branch
 the build goes live on in Steamworks (SteamPipe > Builds).
 
+## Building for the Microsoft Store
+
+The Store gets an MSIX of the app without Steam, packed on Windows by
+`msstore/package.ps1` from the manifest in `msstore/AppxManifest.xml` and the
+images in `msstore/Assets/`. It needs Rust, the Tauri CLI and the Windows
+SDK, and the package's identity from Partner Center (Product management >
+Product identity):
+
+```powershell
+$env:MSSTORE_IDENTITY_NAME = '...'
+$env:MSSTORE_PUBLISHER = 'CN=...'
+$env:MSSTORE_PUBLISHER_DISPLAY_NAME = '...'
+.\msstore\package.ps1
+```
+
+The package lands in `target\msstore\`, unsigned: upload it to the
+submission's Packages page and the Store signs it. Its version is
+`tauri.conf.json`'s with a `.0` after it, which the Store requires; raise
+the version for each submission. To install it on your own machine first,
+make a certificate with the Publisher value as its subject, trust it, and
+sign with it:
+
+```powershell
+$cert = New-SelfSignedCertificate -Type Custom -Subject $env:MSSTORE_PUBLISHER `
+  -KeyUsage DigitalSignature -CertStoreLocation Cert:\CurrentUser\My `
+  -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
+$env:MSSTORE_PFX_PASSWORD = '...'
+Export-PfxCertificate $cert -FilePath dev.pfx -Password (ConvertTo-SecureString $env:MSSTORE_PFX_PASSWORD -AsPlainText -Force)
+Import-Certificate -FilePath (Export-Certificate $cert -FilePath dev.cer).FullName -CertStoreLocation Cert:\LocalMachine\TrustedPeople  # as administrator
+.\msstore\package.ps1 -Pfx dev.pfx
+```
+
+The images come from `icons/icon.png`; run `msstore/assets.sh` again after
+changing it.
+
 ## Not done yet
 
 - **Leaving the painter on Windows and Linux.** Tested on macOS only. WebView2
   and WebKitGTK are expected to show `beforeunload` and `confirm()`
   themselves, and the close and quit question there goes through `rfd`; none
   of it has run on either yet.
+- **The MSIX.** `msstore/package.ps1` was written on macOS and has not run
+  yet; nor has the app, packaged, on Windows (WebView2's data under the
+  package's virtualised `%LOCALAPPDATA%`, the taskbar icons, the unread dot).
 - **Downloads.** Saving an image or `.pch` from the site has not been tried in
   the webview.
 - **Icons.** Generated from the 256px `static/favicon.png` in oeee-cafe/web; regenerate from a

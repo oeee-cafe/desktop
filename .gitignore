@@ -1,3 +1,5 @@
 /target
 /gen
 steam_appid.txt
+*.pfx
+*.cer
