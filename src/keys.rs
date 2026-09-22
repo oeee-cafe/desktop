@@ -1,5 +1,5 @@
 //! The window's keys on Windows: the ones any Windows program answers to,
-//! and the site's commands the macOS menu bar used to carry.
+//! and shortcuts for the site's own commands.
 //!
 //! WebView2's own browser keys are off (webview2.rs), because each of them is
 //! the browser speaking -- Ctrl+F's find bar, Ctrl+P's print preview. That
@@ -8,9 +8,8 @@
 //! keyboard's own Back, Forward and Refresh keys, and Ctrl+W to close the
 //! window, which asks first over a drawing as the close button does.
 //!
-//! Ctrl+F is the site's search rather than a find bar, as Cmd+F was on the
-//! Mac, and the rest are the site's sections under the numbers the menu bar
-//! gave them.
+//! Ctrl+F is the site's search rather than a find bar, and the rest are the
+//! site's sections by number.
 
 /// What a key does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,7 +85,7 @@ pub fn action(key: u32, held: Modifiers) -> Option<Action> {
 /// Where a command goes when the page showing cannot carry it out itself --
 /// the loader, or a page without the toolbar. Commands that are not a place
 /// (a new drawing, which the toolbar's form starts; the shortcuts panel) do
-/// nothing there, as they did from the macOS menu.
+/// nothing there, having nowhere to go instead.
 fn fallback(command: &str) -> Option<&'static str> {
     Some(match command {
         "search" => "/search",
@@ -100,15 +99,48 @@ fn fallback(command: &str) -> Option<&'static str> {
     })
 }
 
-/// The script that carries out a site command in the page showing: the
-/// site's own `window.oeeeCommand`, or else a plain load of the page it
-/// would go to. A plain load, so a page holding a drawing asks first.
+/// The script that carries out a site command in the page showing
+/// (keys_command.js): the site's own `window.oeeeCommand`, or else a plain
+/// load of the page it would go to.
 pub fn command_script(command: &str, site: &url::Url) -> String {
-    let go = fallback(command)
+    let fallback = fallback(command)
         .and_then(|path| site.join(path).ok())
-        .map(|url| format!("location.href = {:?};", url.as_str()))
-        .unwrap_or_default();
-    format!("if (!(window.oeeeCommand && window.oeeeCommand({command:?}))) {{ {go} }}")
+        .map(String::from);
+    format!(
+        "{}({}, {});",
+        COMMAND.trim_end(),
+        serde_json::to_string(command).expect("a string serialises"),
+        serde_json::to_string(&fallback).expect("a string serialises"),
+    )
+}
+
+const COMMAND: &str = include_str!("keys_command.js");
+
+/// Carries out one of the window's keys in the page showing. Going back,
+/// forward or reloading is the page's own, so a page holding a drawing asks
+/// first; closing asks as the close button does (close_guard.rs).
+#[cfg(windows)]
+fn act(window: &tauri::WebviewWindow, site: &url::Url, action: Action) {
+    let script = match action {
+        Action::Back => "history.back();".to_owned(),
+        Action::Forward => "history.forward();".to_owned(),
+        Action::Reload => "location.reload();".to_owned(),
+        Action::Close => {
+            let _ = window.close();
+            return;
+        }
+        Action::Command(name) => command_script(name, site),
+    };
+    let _ = window.eval(script);
+}
+
+/// Answers the window's keys, which WebView2 hands over (webview2.rs).
+#[cfg(windows)]
+pub fn attach(window: &tauri::WebviewWindow, site: &url::Url) -> tauri::Result<()> {
+    let (keys_window, site) = (window.clone(), site.clone());
+    window.with_webview(move |webview| {
+        crate::webview2::on_keys(&webview, move |action| act(&keys_window, &site, action));
+    })
 }
 
 #[cfg(test)]
@@ -190,11 +222,12 @@ mod tests {
     fn a_command_falls_back_to_its_page() {
         let site = url::Url::parse("https://oeee.cafe/").unwrap();
         let script = command_script("search", &site);
-        assert!(script.contains("window.oeeeCommand(\"search\")"));
-        assert!(script.contains("location.href = \"https://oeee.cafe/search\";"));
+        assert!(script.contains("window.oeeeCommand(command)"));
+        assert!(script.contains("location.href = fallback"));
+        assert!(script.ends_with(r#"})("search", "https://oeee.cafe/search");"#));
         // Opening the shortcuts panel, or starting a drawing, has no page to
         // go to instead.
-        assert!(!command_script("shortcuts", &site).contains("location.href"));
-        assert!(!command_script("new-drawing", &site).contains("location.href"));
+        assert!(command_script("shortcuts", &site).ends_with(r#"("shortcuts", null);"#));
+        assert!(command_script("new-drawing", &site).ends_with(r#"("new-drawing", null);"#));
     }
 }

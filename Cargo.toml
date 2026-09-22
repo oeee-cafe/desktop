@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 license = "AGPL-3.0-only"
 repository = "https://github.com/oeee-cafe/desktop"
-description = "Oeee Cafe for Steam: a window onto oeee.cafe"
+description = "Oeee Cafe for the desktop, on Steam and the Microsoft Store: a window onto oeee.cafe"
 
 # Steam: signing in, rich presence, and Steam's library beside the binary,
 # which the app then cannot start without. A build for the Microsoft Store

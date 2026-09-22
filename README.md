@@ -81,13 +81,14 @@ links nor needs Steam's library, and never marks a page `data-steam-app`.
 
 ## Rich presence
 
-The site says what each page is in `<meta name="oeee-presence">`: drawing,
-a relay, drawing together in a collaborative room, a banner, a replay, and
-the community when it is public. After every page load the app reads it and
-sets `steam_display` to a token of `steam/rich_presence.vdf`, with
-`%community%` filled in; a collaborative room also sets
-`steam_player_group`, so friends in one room show together. A page without
-the tag is browsing. Upload `steam/rich_presence.vdf` in Steamworks
+The site says what each page is in the `page` message it sends the app
+(`src/bridge.rs`; `app_bridge.jinja` in oeee-cafe/web): drawing, a relay,
+drawing together in a collaborative room, a banner, a replay, and the
+community when it is public. It sends one on every page and again after a
+boosted navigation, and the app sets `steam_display` to a token of
+`steam/rich_presence.vdf`, with `%community%` filled in; a collaborative room
+also sets `steam_player_group`, so friends in one room show together. A page
+that says nothing is browsing, and so is the bundled loader. Upload `steam/rich_presence.vdf` in Steamworks
 (Community > Rich Presence Localization) whenever it changes; a token the
 app sets that Steam has not been given shows nothing.
 

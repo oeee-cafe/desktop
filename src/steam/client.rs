@@ -10,7 +10,8 @@ use std::ffi::c_void;
 
 use steamworks::{sys, AuthTicket, Callback, CallbackHandle, Client, TicketForWebApiResponse};
 
-use super::{hex, rich_presence, PagePresence};
+use super::{hex, rich_presence};
+use crate::bridge::Page;
 
 /// Names the service the ticket is for; the site accepts no other. Has to
 /// match `TICKET_IDENTITY` in oeee-cafe/web's `src/steam.rs`.
@@ -136,12 +137,11 @@ impl Steam {
 }
 
 impl Steam {
-    /// Tells Steam what the page says the player is doing. `answer` is what
-    /// [`READ_PRESENCE`] evaluated to, as JSON.
-    pub fn show_presence(&self, answer: &str) {
-        let page: Option<PagePresence> = serde_json::from_str(answer).unwrap_or(None);
+    /// Tells Steam what the page says the player is doing, or that they are
+    /// browsing when there is no page of the site to say.
+    pub fn show_presence(&self, page: Option<&Page>) {
         let friends = self.client.friends();
-        for (key, value) in rich_presence(page.as_ref()) {
+        for (key, value) in rich_presence(page) {
             friends.set_rich_presence(key, value.as_deref());
         }
     }

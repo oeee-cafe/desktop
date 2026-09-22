@@ -48,39 +48,40 @@ pub fn loader_for(loader: &Url, page: &Url) -> Url {
 }
 
 /// Runs in every page of the site: a page navigation htmx could not complete
-/// is made again as an ordinary one.
+/// is made again as an ordinary one (offline.js), knowing the same statuses
+/// as `GATEWAY`.
 pub fn page_script() -> String {
     let statuses = GATEWAY
         .iter()
         .map(u16::to_string)
         .collect::<Vec<_>>()
         .join(", ");
-    format!(
-        r#"(function () {{
-  var GATEWAY = [{statuses}];
-  // A page, as htmx fetches one: the whole body, by GET -- a boosted link
-  // or search. Anything smaller is a part of the page, and its failure is
-  // the page's to show.
-  function page(ctx) {{
-    return !!ctx && ctx.target === document.body && !!ctx.request &&
-      String(ctx.request.method).toUpperCase() === "GET";
-  }}
-  function again(ctx) {{
-    location.assign(ctx.request.action);
-  }}
-  document.addEventListener("htmx:before:swap", function (event) {{
-    var ctx = event.detail && event.detail.ctx;
-    if (!page(ctx) || !ctx.response || GATEWAY.indexOf(ctx.response.status) < 0) return;
-    event.preventDefault();
-    again(ctx);
-  }});
-  document.addEventListener("htmx:error", function (event) {{
-    var ctx = event.detail && event.detail.ctx;
-    if (!page(ctx) || ctx.response) return;
-    again(ctx);
-  }});
-}})();"#
-    )
+    PAGE_SCRIPT.replace("__GATEWAY__", &format!("[{statuses}]"))
+}
+
+const PAGE_SCRIPT: &str = include_str!("offline.js");
+
+/// Sends a page of the site that could not be reached back to the loader,
+/// which says so and tries it again. `loader` is the loader's path in the
+/// app, as the window was opened on.
+#[cfg(windows)]
+pub fn attach(window: &tauri::WebviewWindow, site: &Url, loader: &str) -> tauri::Result<()> {
+    // Where WebView2 serves the bundled loader from; the window has not
+    // loaded it yet, so it cannot be asked.
+    let loader = Url::parse("http://tauri.localhost/")
+        .and_then(|origin| origin.join(loader))
+        .expect("the loader's address is a valid URL");
+    let (unreachable_window, site) = (window.clone(), site.clone());
+    window.with_webview(move |webview| {
+        crate::webview2::on_unreachable(&webview, move |page| {
+            let Ok(page) = Url::parse(&page) else {
+                return;
+            };
+            if crate::site::is_site(&page, &site) {
+                let _ = unreachable_window.navigate(loader_for(&loader, &page));
+            }
+        });
+    })
 }
 
 #[cfg(test)]

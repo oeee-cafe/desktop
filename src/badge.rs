@@ -1,20 +1,12 @@
 //! The unread count on the app's icon.
 //!
-//! The site says how many notifications are unread (chrome.rs sends the
-//! number in its toolbar's badge as an `oeee-unread` event whenever it
-//! changes), and the app puts it where each system puts one: a number on
-//! the launcher's icon on Linux, and on Windows -- whose taskbar has no
-//! numbers -- a red dot over the taskbar button.
+//! The site says how many notifications are unread (an `unread` message,
+//! bridge.rs) whenever the number changes, and the app puts it where each
+//! system puts one: a number on the launcher's icon on Linux, and on
+//! Windows -- whose taskbar has no numbers -- a red dot over the taskbar
+//! button. A count of none or fewer shows nothing.
 
 use tauri::{Runtime, WebviewWindow};
-
-/// The event the site's toolbar sends its unread count in.
-pub const EVENT: &str = "oeee-unread";
-
-/// The count in an event's payload: a JSON number, or anything else as none.
-pub fn parse(payload: &str) -> i64 {
-    payload.trim().parse::<i64>().unwrap_or(0).max(0)
-}
 
 pub fn show<R: Runtime>(window: &WebviewWindow<R>, count: i64) {
     #[cfg(not(windows))]
@@ -61,16 +53,6 @@ fn dot_pixels() -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_count_is_a_number_or_none() {
-        assert_eq!(parse("3"), 3);
-        assert_eq!(parse(" 12 "), 12);
-        assert_eq!(parse("0"), 0);
-        assert_eq!(parse("-4"), 0);
-        assert_eq!(parse("null"), 0);
-        assert_eq!(parse("\"x\""), 0);
-    }
 
     #[test]
     fn the_dot_is_red_inside_and_clear_at_the_corners() {
