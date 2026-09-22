@@ -12,6 +12,12 @@
 //! `/auth/steam/app`, stops that navigation, gets a ticket, and posts it to
 //! `/auth/steam` from the page, as the page's own form would.
 //!
+//! And, when Steam says a DLC has just been installed -- the Supporter Pack,
+//! bought in the overlay or the store while the app was open -- a fresh
+//! ticket, posted in the background to `/auth/steam/refresh`, so the site
+//! asks Steam again what the player owns and the supporter badge follows at
+//! once. That signs nobody in and moves no page, so it can happen mid-drawing.
+//!
 //! Without Steam -- started from a terminal, or Steam not running -- the app is
 //! the same window onto the site it always was, and the link is never shown:
 //! the site draws it only on a page the app has marked `data-steam-app`.
@@ -43,6 +49,10 @@ impl Steam {
     }
 
     pub fn show_presence(&self, _answer: &str) {
+        match *self {}
+    }
+
+    pub fn on_dlc_installed(&self, _then: impl Fn(u32) + Send + 'static) {
         match *self {}
     }
 }
@@ -161,6 +171,28 @@ pub fn post_ticket_script(ticket: &str, next: Option<&str>) -> String {
         serde_json::to_string(ticket).expect("a string serialises"),
         serde_json::to_string(&next).expect("a string serialises"),
     )
+}
+
+/// Posts `ticket` to the site's `/auth/steam/refresh` from the page that is
+/// showing, without leaving it: the site asks Steam what the ticket's account
+/// owns now and records it. Nothing is said to the player either way -- the
+/// badge is simply there on the next page.
+pub fn refresh_script(ticket: &str) -> String {
+    format!(
+        r#"(function (ticket) {{
+  var body = new URLSearchParams();
+  body.append("ticket", ticket);
+  fetch("/auth/steam/refresh", {{ method: "POST", body: body, credentials: "same-origin" }})
+    .catch(function () {{}});
+}})({})"#,
+        serde_json::to_string(ticket).expect("a string serialises"),
+    )
+}
+
+/// Whether the page showing is the site's, and so can post to it: not the
+/// loader, or its "can't be reached" page.
+pub fn on_the_site(page: &Url, site: &Url) -> bool {
+    page.origin() == site.origin()
 }
 
 /// Tells the player, in the page, that Steam did not sign them in.
@@ -305,6 +337,21 @@ mod tests {
     #[test]
     fn a_ticket_is_hex() {
         assert_eq!(hex(&[0x14, 0x00, 0xab, 0xff]), "1400abff");
+    }
+
+    #[test]
+    fn a_refresh_posts_the_ticket_from_the_page_it_is_on() {
+        let script = refresh_script("14\"00ab");
+        assert!(script.contains(r#"fetch("/auth/steam/refresh""#));
+        assert!(script.ends_with(r#"})("14\"00ab")"#));
+        assert!(!script.contains("location"), "the page stays where it is");
+    }
+
+    #[test]
+    fn only_a_page_of_the_site_is_refreshed_from() {
+        assert!(on_the_site(&Url::parse("https://oeee.cafe/draw").unwrap(), &site()));
+        assert!(!on_the_site(&Url::parse("tauri://localhost/index.html").unwrap(), &site()));
+        assert!(!on_the_site(&Url::parse("http://tauri.localhost/index.html").unwrap(), &site()));
     }
 
     #[test]

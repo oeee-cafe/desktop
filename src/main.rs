@@ -214,6 +214,29 @@ fn sign_in_with_steam(app: &AppHandle, steam: std::sync::Arc<steam::Steam>, next
     });
 }
 
+/// Gets a fresh ticket and posts it to the site in the background, from the
+/// page showing, so the site asks Steam again what the player owns. Off the
+/// thread Steam called from: the ticket arrives on that thread.
+fn refresh_steam_standing(app: &AppHandle, steam: &std::sync::Arc<steam::Steam>, site: &Url) {
+    let (app, steam, site) = (app.clone(), steam.clone(), site.clone());
+    std::thread::spawn(move || {
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
+        if !window.url().is_ok_and(|page| steam::on_the_site(&page, &site)) {
+            // The loader or its "can't be reached" page: the daily recheck
+            // on the site will notice instead.
+            return;
+        }
+        match steam.web_api_ticket() {
+            Ok(ticket) => {
+                let _ = window.eval(steam::refresh_script(&ticket));
+            }
+            Err(error) => eprintln!("no Steam ticket to refresh with: {error}"),
+        }
+    });
+}
+
 fn main() {
     // Before any window, as Steam asks, so its overlay can find them.
     let steam = steam::start();
@@ -343,6 +366,18 @@ fn main() {
                     NewWindowResponse::Deny
                 })
                 .build()?;
+
+            // A DLC bought while the app is open -- the Supporter Pack -- is
+            // told to the site at once, rather than at its daily recheck.
+            if let Some(steam) = &steam {
+                let (app, site) = (app.handle().clone(), site.clone());
+                let weak = std::sync::Arc::downgrade(steam);
+                steam.on_dlc_installed(move |_app_id| {
+                    if let Some(steam) = weak.upgrade() {
+                        refresh_steam_standing(&app, &steam, &site);
+                    }
+                });
+            }
 
             // The site's unread count, on the app's icon.
             let badge_window = window.clone();

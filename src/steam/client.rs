@@ -1,12 +1,14 @@
 //! Steam's API itself, in a build with the `steam` feature: the ticket for
-//! signing in and the rich presence, handed to Steam as `super` works them
-//! out.
+//! signing in, the rich presence, handed to Steam as `super` works them out,
+//! and word of a DLC installed.
 
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use steamworks::{AuthTicket, CallbackHandle, Client, TicketForWebApiResponse};
+use std::ffi::c_void;
+
+use steamworks::{sys, AuthTicket, Callback, CallbackHandle, Client, TicketForWebApiResponse};
 
 use super::{hex, rich_presence, PagePresence};
 
@@ -19,11 +21,32 @@ const STEAM_TICKET_IDENTITY: &str = "oeee-cafe";
 const TICKET_TIMEOUT: Duration = Duration::from_secs(15);
 
 type Waiting = Arc<Mutex<Vec<(AuthTicket, Sender<Result<Vec<u8>, String>>)>>>;
+type DlcListener = Arc<Mutex<Option<Box<dyn Fn(u32) + Send>>>>;
+
+/// `DlcInstalled_t`, which the crate does not wrap: the player has come to
+/// own a DLC and it is installed. The Supporter Pack has no content, so it
+/// is installed the moment it is owned.
+struct DlcInstalled {
+    app_id: u32,
+}
+
+unsafe impl Callback for DlcInstalled {
+    const ID: i32 = sys::DlcInstalled_t_k_iCallback as _;
+
+    unsafe fn from_raw(raw: *mut c_void) -> Self {
+        let raw = raw.cast::<sys::DlcInstalled_t>().read_unaligned();
+        DlcInstalled {
+            app_id: raw.m_nAppID,
+        }
+    }
+}
 
 pub struct Steam {
     client: Client,
     waiting: Waiting,
+    dlc_listener: DlcListener,
     _ticket_callback: CallbackHandle,
+    _dlc_callback: CallbackHandle,
 }
 
 /// Starts Steam's API, or says why not and carries on without it.
@@ -57,6 +80,16 @@ pub fn start() -> Option<Arc<Steam>> {
         }
     });
 
+    let dlc_listener: DlcListener = Arc::default();
+    let dlc_callback = client.register_callback({
+        let dlc_listener = dlc_listener.clone();
+        move |installed: DlcInstalled| {
+            if let Some(then) = dlc_listener.lock().unwrap().as_ref() {
+                then(installed.app_id);
+            }
+        }
+    });
+
     // Callbacks arrive only when asked for. Nothing here is urgent, so ten
     // times a second is plenty.
     let pump = client.clone();
@@ -71,7 +104,9 @@ pub fn start() -> Option<Arc<Steam>> {
     Some(Arc::new(Steam {
         client,
         waiting,
+        dlc_listener,
         _ticket_callback: ticket_callback,
+        _dlc_callback: dlc_callback,
     }))
 }
 
@@ -109,5 +144,14 @@ impl Steam {
         for (key, value) in rich_presence(page.as_ref()) {
             friends.set_rich_presence(key, value.as_deref());
         }
+    }
+}
+
+impl Steam {
+    /// Calls `then` with a DLC's app id whenever Steam says one has been
+    /// installed. On the thread that pumps Steam's callbacks, so `then` must
+    /// not wait on Steam itself -- a ticket, say -- without moving off it.
+    pub fn on_dlc_installed(&self, then: impl Fn(u32) + Send + 'static) {
+        *self.dlc_listener.lock().unwrap() = Some(Box::new(then));
     }
 }

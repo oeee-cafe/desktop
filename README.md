@@ -32,6 +32,16 @@ the identity `oeee-cafe`) and posts it to `/auth/steam` from the page, as a
 form on the page would. The site checks it with Steam itself, so the app is
 trusted with nothing (`src/steam.rs`).
 
+When Steam says a DLC has been installed (`DlcInstalled_t`: the Supporter
+Pack, bought in the overlay or the store while the app is open), the app
+gets a fresh ticket and posts it in the background to `/auth/steam/refresh`
+from the page showing. The site asks Steam what that account owns and
+records it, so the supporter badge shows at once rather than at the site's
+daily recheck. It signs nobody in and moves no page, so a drawing in
+progress is left alone. The crate does not wrap that callback, so
+`steamworks` is built with `raw-bindings` for `src/steam/client.rs` to
+register it.
+
 Without Steam, the app starts as before and the link never shows. Steam's
 library still has to be beside the binary: the app links it and will not
 start without it. `build.rs` puts it in `target/<profile>/`, and
