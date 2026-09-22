@@ -66,6 +66,12 @@ API names are `FIRST_DRAWING`, `FIRST_RELAY`, `FIRST_COLLABORATION` and
 `STEAM_SUPPORTER`, each
 "Set By: Official GS" so that only the server can unlock them.
 
+The icons Steamworks asks for are in `steam/achievements/`: `<NAME>.jpg`
+for earned and `<NAME>_locked.jpg` for not yet, 64 by 64, one pair per API
+name. They are the profile's Material Symbols badges (Apache 2.0, Google),
+drawn by `steam/achievements/render.mjs` from the path data in `icons.json`;
+run it again after changing either.
+
 The site itself is [oeee-cafe/web](https://github.com/oeee-cafe/web); the
 other clients are [oeee-cafe/ios](https://github.com/oeee-cafe/ios) and
 [oeee-cafe/android](https://github.com/oeee-cafe/android).
