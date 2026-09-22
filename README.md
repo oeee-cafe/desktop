@@ -54,6 +54,15 @@ the tag is browsing. Upload `steam/rich_presence.vdf` in Steamworks
 (Community > Rich Presence Localization) whenever it changes; a token the
 app sets that Steam has not been given shows nothing.
 
+## Achievements
+
+First drawing, first relay and first collaboration are unlocked by the
+site, not the app: it records them however the player drew, and sends them
+to Steam with the publisher key (`SetUserStatsForGame`). Linking Steam hands
+over everything already earned. In Steamworks (Stats & Achievements) the
+API names are `FIRST_DRAWING`, `FIRST_RELAY` and `FIRST_COLLABORATION`, each
+"Set By: Official GS" so that only the server can unlock them.
+
 The site itself is [oeee-cafe/web](https://github.com/oeee-cafe/web); the
 other clients are [oeee-cafe/ios](https://github.com/oeee-cafe/ios) and
 [oeee-cafe/android](https://github.com/oeee-cafe/android).
