@@ -13,10 +13,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use tauri::webview::NewWindowResponse;
-use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Listener, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
+mod badge;
 mod chrome;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -197,6 +198,28 @@ fn main() {
     let menu_site = site.clone();
 
     tauri::Builder::default()
+        // First, as the plugin asks: a second launch hands over here and
+        // exits, and the window already open comes forward.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
+        // Where the window was, how big, and whether it was maximised or full
+        // screen -- and not its decorations or visibility, which are the
+        // app's to set on each platform.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+                        | tauri_plugin_window_state::StateFlags::FULLSCREEN,
+                )
+                .build(),
+        )
         .on_menu_event(move |app, event| menu::handle(app, event, &menu_site))
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
@@ -216,7 +239,9 @@ fn main() {
                     .permission("core:window:allow-minimize")
                     .permission("core:window:allow-toggle-maximize")
                     .permission("core:window:allow-is-maximized")
-                    .permission("core:window:allow-close"),
+                    .permission("core:window:allow-close")
+                    // The unread count for the app's icon (badge.rs).
+                    .permission("core:event:allow-emit"),
             )?;
 
             let navigation = (app.handle().clone(), site.clone());
@@ -273,6 +298,12 @@ fn main() {
                     NewWindowResponse::Deny
                 })
                 .build()?;
+
+            // The site's unread count, on the app's icon.
+            let badge_window = window.clone();
+            app.listen_any(badge::EVENT, move |event| {
+                badge::show(&badge_window, badge::parse(event.payload()));
+            });
 
             if let Ok(theme) = window.theme() {
                 let _ = window.set_background_color(Some(background(theme)));

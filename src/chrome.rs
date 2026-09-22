@@ -37,21 +37,35 @@ const WINDOWS_CAPTION: &str = include_str!("caption.js");
 
 fn platform_script(os: &str) -> String {
     format!(
-        r#"(function () {{
+        r##"(function () {{
   var root = document.documentElement;
   root.setAttribute("data-desktop", "{os}");
   var style = document.createElement("style");
   style.textContent = 'html[data-desktop="macos"] .nav-bar #menubar {{ padding-left: 96px; }}';
   (document.head || root).appendChild(style);
+  // The unread count the toolbar shows, sent to the app for its icon
+  // (badge.rs) whenever it changes -- it is swapped in by the handlers that
+  // change it, so watching the document catches every one.
+  var unread = null;
+  function reportUnread(bar) {{
+    var badge = bar.querySelector("#nav-notifications .toolbar-badge");
+    var count = badge ? parseInt(badge.textContent, 10) || 0 : 0;
+    if (count === unread) return;
+    unread = count;
+    var ipc = window.__TAURI_INTERNALS__;
+    if (ipc) ipc.invoke("plugin:event|emit", {{ event: "oeee-unread", payload: count }}).catch(function () {{}});
+  }}
   function mark() {{
     var bar = document.querySelector(".nav-bar");
-    if (bar && bar.getAttribute("data-tauri-drag-region") !== "deep") {{
+    if (!bar) return;
+    if (bar.getAttribute("data-tauri-drag-region") !== "deep") {{
       bar.setAttribute("data-tauri-drag-region", "deep");
     }}
+    reportUnread(bar);
   }}
   document.addEventListener("DOMContentLoaded", mark);
   new MutationObserver(mark).observe(root, {{ childList: true, subtree: true }});
-}})();"#
+}})();"##
     )
 }
 
@@ -89,6 +103,12 @@ mod tests {
     #[test]
     fn the_script_names_the_platform() {
         assert!(script("macos").contains(r#"setAttribute("data-desktop", "macos")"#));
+    }
+
+    #[test]
+    fn the_toolbar_reports_its_unread_count() {
+        assert!(script("macos").contains(r#"event: "oeee-unread""#));
+        assert_eq!(crate::badge::EVENT, "oeee-unread");
     }
 
     #[test]
