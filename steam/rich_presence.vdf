@@ -1,0 +1,63 @@
+"lang"
+{
+	"english"
+	{
+		"tokens"
+		{
+			"#Browsing"	"Browsing Oeee Cafe"
+			"#Drawing"	"Drawing"
+			"#DrawingIn"	"Drawing in %community%"
+			"#Relaying"	"Drawing a relay"
+			"#RelayingIn"	"Drawing a relay in %community%"
+			"#Collaborating"	"Drawing together"
+			"#CollaboratingIn"	"Drawing together in %community%"
+			"#DrawingBanner"	"Drawing a banner"
+			"#WatchingReplay"	"Watching a replay"
+		}
+	}
+	"koreana"
+	{
+		"tokens"
+		{
+			"#Browsing"	"오이카페 구경 중"
+			"#Drawing"	"그림 그리는 중"
+			"#DrawingIn"	"%community%에서 그림 그리는 중"
+			"#Relaying"	"이어그리기 중"
+			"#RelayingIn"	"%community%에서 이어그리기 중"
+			"#Collaborating"	"함께 그리는 중"
+			"#CollaboratingIn"	"%community%에서 함께 그리는 중"
+			"#DrawingBanner"	"배너 그리는 중"
+			"#WatchingReplay"	"리플레이 보는 중"
+		}
+	}
+	"japanese"
+	{
+		"tokens"
+		{
+			"#Browsing"	"OEEEカフェを見ています"
+			"#Drawing"	"お絵かき中"
+			"#DrawingIn"	"%community%でお絵かき中"
+			"#Relaying"	"リレーを描いています"
+			"#RelayingIn"	"%community%でリレーを描いています"
+			"#Collaborating"	"みんなでお絵かき中"
+			"#CollaboratingIn"	"%community%でみんなでお絵かき中"
+			"#DrawingBanner"	"バナーを描いています"
+			"#WatchingReplay"	"リプレイを見ています"
+		}
+	}
+	"schinese"
+	{
+		"tokens"
+		{
+			"#Browsing"	"正在浏览黄瓜咖啡馆"
+			"#Drawing"	"正在画画"
+			"#DrawingIn"	"正在%community%画画"
+			"#Relaying"	"正在画接力"
+			"#RelayingIn"	"正在%community%画接力"
+			"#Collaborating"	"正在一起画画"
+			"#CollaboratingIn"	"正在%community%一起画画"
+			"#DrawingBanner"	"正在画横幅"
+			"#WatchingReplay"	"正在看回放"
+		}
+	}
+}

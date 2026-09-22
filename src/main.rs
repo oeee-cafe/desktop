@@ -269,6 +269,7 @@ fn main() {
 
             let navigation = (app.handle().clone(), site.clone(), steam.clone());
             let new_window = (app.handle().clone(), site.clone());
+            let page_load = steam.clone();
 
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(loader.into()))
                 .title("Oeee Cafe")
@@ -302,6 +303,19 @@ fn main() {
             let window = builder
                 // Edge's address and contact suggestions over form fields.
                 .general_autofill_enabled(false)
+                // What the player is doing, for their Steam friends: read
+                // off each page as it finishes loading (steam.rs).
+                .on_page_load(move |window, payload| {
+                    let Some(steam) = page_load.clone() else {
+                        return;
+                    };
+                    if payload.event() != tauri::webview::PageLoadEvent::Finished {
+                        return;
+                    }
+                    let _ = window.eval_with_callback(steam::READ_PRESENCE, move |answer| {
+                        steam.show_presence(&answer);
+                    });
+                })
                 .on_navigation(move |url| {
                     let (app, site, steam) = &navigation;
                     if let (Some(steam), Some(next)) = (steam, steam::sign_in_link(url, site)) {

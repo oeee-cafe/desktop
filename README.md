@@ -42,6 +42,18 @@ for Windows. The copies in `steam/redistributable/` are the ones the
 To have Steam start a development build, put the app id in a
 `steam_appid.txt` in the directory you run it from.
 
+## Rich presence
+
+The site says what each page is in `<meta name="oeee-presence">`: drawing,
+a relay, drawing together in a collaborative room, a banner, a replay, and
+the community when it is public. After every page load the app reads it and
+sets `steam_display` to a token of `steam/rich_presence.vdf`, with
+`%community%` filled in; a collaborative room also sets
+`steam_player_group`, so friends in one room show together. A page without
+the tag is browsing. Upload `steam/rich_presence.vdf` in Steamworks
+(Community > Rich Presence Localization) whenever it changes; a token the
+app sets that Steam has not been given shows nothing.
+
 The site itself is [oeee-cafe/web](https://github.com/oeee-cafe/web); the
 other clients are [oeee-cafe/ios](https://github.com/oeee-cafe/ios) and
 [oeee-cafe/android](https://github.com/oeee-cafe/android).
