@@ -14,7 +14,6 @@
 // CloseRequested as the system's button did, so a page holding a drawing is
 // still asked before it is left.
 (function () {
-  var root = document.documentElement;
   var invoke = function (command) {
     var ipc = window.__TAURI_INTERNALS__;
     if (!ipc) return Promise.resolve();
@@ -38,7 +37,13 @@
     ".oeee-caption button.is-close:active { background: #b3261e; color: #ffffff; }",
     ".oeee-caption svg { display: block; }",
   ].join("\n");
-  (document.head || root).appendChild(style);
+  // This runs before the document has its root element (chrome.rs), so the
+  // style goes in once there is somewhere to put it.
+  function addStyle() {
+    var root = document.documentElement;
+    if (style.parentNode || !root) return;
+    (document.head || root).appendChild(style);
+  }
 
   var GLYPHS = {
     minimize: '<path d="M0 5.5h10" />',
@@ -102,6 +107,7 @@
   // htmx swaps the body on boosted navigation, toolbar and all, so the
   // controls are put back whenever the document changes.
   function place() {
+    addStyle();
     if (!document.body) return;
     var bar = document.querySelector(".nav-bar");
     var existing = document.getElementById("oeee-caption");
@@ -119,6 +125,6 @@
     place();
     refreshMaximized();
   });
-  new MutationObserver(place).observe(root, { childList: true, subtree: true });
+  new MutationObserver(place).observe(document, { childList: true, subtree: true });
   window.addEventListener("resize", refreshMaximized);
 })();

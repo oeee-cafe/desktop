@@ -38,11 +38,19 @@ const WINDOWS_CAPTION: &str = include_str!("caption.js");
 fn platform_script(os: &str) -> String {
     format!(
         r##"(function () {{
-  var root = document.documentElement;
-  root.setAttribute("data-desktop", "{os}");
-  var style = document.createElement("style");
-  style.textContent = 'html[data-desktop="macos"] .nav-bar #menubar {{ padding-left: 96px; }}';
-  (document.head || root).appendChild(style);
+  // WebView2 runs this before the document has its root element (WebKit
+  // after), so the page is marked once the root arrives, and the document
+  // itself is what is watched.
+  var started = false;
+  function start() {{
+    var root = document.documentElement;
+    if (started || !root) return;
+    started = true;
+    root.setAttribute("data-desktop", "{os}");
+    var style = document.createElement("style");
+    style.textContent = 'html[data-desktop="macos"] .nav-bar #menubar {{ padding-left: 96px; }}';
+    (document.head || root).appendChild(style);
+  }}
   // The unread count the toolbar shows, sent to the app for its icon
   // (badge.rs) whenever it changes -- it is swapped in by the handlers that
   // change it, so watching the document catches every one.
@@ -56,6 +64,7 @@ fn platform_script(os: &str) -> String {
     if (ipc) ipc.invoke("plugin:event|emit", {{ event: "oeee-unread", payload: count }}).catch(function () {{}});
   }}
   function mark() {{
+    start();
     var bar = document.querySelector(".nav-bar");
     if (!bar) return;
     if (bar.getAttribute("data-tauri-drag-region") !== "deep") {{
@@ -63,8 +72,9 @@ fn platform_script(os: &str) -> String {
     }}
     reportUnread(bar);
   }}
+  start();
   document.addEventListener("DOMContentLoaded", mark);
-  new MutationObserver(mark).observe(root, {{ childList: true, subtree: true }});
+  new MutationObserver(mark).observe(document, {{ childList: true, subtree: true }});
 }})();"##
     )
 }
