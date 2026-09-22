@@ -5,6 +5,10 @@
 //! aside: it goes transparent, and the traffic lights sit inside the toolbar,
 //! at its left.
 //!
+//! On Windows the window has no title bar at all, and its minimise,
+//! maximise and close buttons are drawn at the toolbar's right end instead
+//! (caption.js).
+//!
 //! The site knows nothing about any of this. It is told only which platform
 //! it is in (`data-desktop` on its root element), and the app marks the
 //! toolbar as the handle the window is dragged by.
@@ -17,6 +21,21 @@ use url::Url;
 /// stay clickable; htmx replaces the body on boosted navigation, so the
 /// toolbar is marked again whenever the document changes.
 pub fn script(os: &str) -> String {
+    let mut script = platform_script(os);
+    // On Windows the window has no title bar of its own, and the toolbar
+    // carries the window's controls (caption.js).
+    if os == "windows" {
+        script.push('\n');
+        script.push_str(WINDOWS_CAPTION);
+    }
+    script
+}
+
+/// Minimise, maximise or restore, and close, drawn into the toolbar on
+/// Windows. See caption.js.
+const WINDOWS_CAPTION: &str = include_str!("caption.js");
+
+fn platform_script(os: &str) -> String {
     format!(
         r#"(function () {{
   var root = document.documentElement;
@@ -36,8 +55,9 @@ pub fn script(os: &str) -> String {
     )
 }
 
-/// The site's pages may move and maximise the window, which dragging the
-/// toolbar needs, and nothing else.
+/// The site's pages may move, minimise, maximise and close the window --
+/// what dragging the toolbar and the Windows caption buttons need -- and
+/// nothing else.
 pub fn site_pattern(site: &Url) -> String {
     let host = site.host_str().unwrap_or_default();
     match site.port() {
@@ -69,5 +89,13 @@ mod tests {
     #[test]
     fn the_script_names_the_platform() {
         assert!(script("macos").contains(r#"setAttribute("data-desktop", "macos")"#));
+    }
+
+    #[test]
+    fn only_windows_draws_the_window_controls() {
+        assert!(script("windows").contains("oeee-caption"));
+        assert!(script("windows").contains(r#"invoke("close")"#));
+        assert!(!script("macos").contains("oeee-caption"));
+        assert!(!script("linux").contains("oeee-caption"));
     }
 }

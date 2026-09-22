@@ -211,7 +211,12 @@ fn main() {
                     .remote(chrome::site_pattern(&site))
                     .window("main")
                     .permission("core:window:allow-start-dragging")
-                    .permission("core:window:allow-internal-toggle-maximize"),
+                    .permission("core:window:allow-internal-toggle-maximize")
+                    // The Windows caption buttons in the toolbar (caption.js).
+                    .permission("core:window:allow-minimize")
+                    .permission("core:window:allow-toggle-maximize")
+                    .permission("core:window:allow-is-maximized")
+                    .permission("core:window:allow-close"),
             )?;
 
             let navigation = (app.handle().clone(), site.clone());
@@ -228,6 +233,12 @@ fn main() {
             // them inside a title bar it makes `y` taller, so their centre
             // lands 2.5pt above `y`, measured: 28.5 centres them at 26, the
             // middle of the 52pt toolbar and of its tabs.
+            // On Windows the title bar goes altogether: the toolbar is the
+            // title bar, and draws the window's controls at its right end
+            // (caption.js). The window keeps its shadow, and with it the
+            // system's resize edges.
+            #[cfg(windows)]
+            let builder = builder.decorations(false).shadow(true);
             #[cfg(target_os = "macos")]
             let builder = builder
                 .title_bar_style(tauri::TitleBarStyle::Overlay)
