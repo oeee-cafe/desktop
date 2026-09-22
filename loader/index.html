@@ -187,27 +187,40 @@
       document.getElementById("offline-body").textContent = words.body;
       document.getElementById("retry").textContent = words.retry;
 
-      var site =
-        new URLSearchParams(location.search).get("site") || "https://oeee.cafe/";
+      var params = new URLSearchParams(location.search);
+      var site = params.get("site") || "https://oeee.cafe/";
+      // The app sends the window back here when a page of the site could
+      // not be reached (offline.rs in the app), with that page to go on to
+      // and the question already answered.
+      var page = site;
+      try {
+        var wanted = new URL(params.get("page") || site);
+        if (wanted.origin === new URL(site).origin) page = wanted.href;
+      } catch (_) {}
+
+      function showOffline() {
+        document.getElementById("connecting").hidden = true;
+        document.getElementById("offline").hidden = false;
+      }
 
       function connect() {
         document.getElementById("connecting").hidden = false;
         document.getElementById("offline").hidden = true;
         // `no-cors` resolves on any answer from the server and rejects only
-        // when nothing answered, which is exactly the question here.
+        // when nothing answered. A gateway answering for a site that is down
+        // answers too; the page it serves is caught by the app, which sends
+        // the window back here.
         fetch(site, { mode: "no-cors", cache: "no-store" })
           .then(function () {
-            location.replace(site);
+            location.replace(page);
           })
-          .catch(function () {
-            document.getElementById("connecting").hidden = true;
-            document.getElementById("offline").hidden = false;
-          });
+          .catch(showOffline);
       }
 
       document.getElementById("retry").addEventListener("click", connect);
       window.addEventListener("online", connect);
-      connect();
+      if (params.get("offline")) showOffline();
+      else connect();
     </script>
   </body>
 </html>

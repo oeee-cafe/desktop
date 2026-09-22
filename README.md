@@ -4,7 +4,11 @@ A Tauri app that opens oeee.cafe in its own window. It holds no copy of the
 site, so what it shows is always what is deployed.
 
 - It opens on `loader/index.html`, which checks the site answers and shows a
-  "can't be reached" page with a retry button when it does not.
+  "can't be reached" page with a retry button when it does not. On Windows a
+  page that fails later -- nothing answering, or a gateway's 502, 503, 504 or
+  Cloudflare 52x in the site's place -- goes back there too, and trying
+  again opens the page the player was going to (`src/offline.rs`). The
+  site's own error pages, a 404 or a 500, are shown as they are.
 - Links on the site stay in the window; links anywhere else, including
   `target="_blank"` ones, open in the player's browser.
 - The site is given no access to Tauri's APIs (`capabilities/default.json`
@@ -12,7 +16,11 @@ site, so what it shows is always what is deployed.
   replaces `window.confirm` on every page with one that returns a Promise,
   which htmx takes as "yes".
 - A page that would stop a browser leaving it (the painter, with an unsaved
-  drawing) is asked about before the window closes, and the player can stay.
+  drawing) is asked about before the window closes, and the player can stay;
+  only the Leave button leaves, not Esc or the dialog's close box.
+- A download is saved where the player says, in the system's Save dialog
+  (`src/downloads.rs`). A `.pch` replay is never handed over: not as a
+  download, and not as a link for the browser to download.
 - The browser shows through as little as it can: no right-click menu except
   on text fields, selections and images; on Windows, no F5, Ctrl+F, Ctrl+P,
   autofill suggestions or offer to save a password (`src/webview2.rs`); and
@@ -171,13 +179,16 @@ changing it.
 
 ## Not done yet
 
-- **Leaving the painter.** WebView2 and WebKitGTK are expected to show
-  `beforeunload` and `confirm()` themselves, and the question on closing the
-  window goes through `rfd`; none of it has been tried yet.
+- **Linux.** The build has not run. WebKitGTK is expected to show
+  `beforeunload` itself, and closing the window and saving a download go
+  through `rfd`'s GTK dialogs, as on Windows through its own. A page that
+  fails mid-session is not caught there (`src/offline.rs` watches WebView2
+  only), so it shows WebKitGTK's error page.
+- **Leaving the real painter.** On Windows, leaving and closing were tried on
+  a page with the painter's `beforeunload` handler, not in the painter
+  itself, signed in.
 - **The MSIX.** `msstore/package.ps1` has not run yet; nor has the
   app, packaged, on Windows or Windows on ARM (WebView2's data under the
   package's virtualised `%LOCALAPPDATA%`, the taskbar icons, the unread dot).
-- **Downloads.** Saving an image or `.pch` from the site has not been tried in
-  the webview.
 - **Icons.** Generated from the 256px `static/favicon.png` in oeee-cafe/web; regenerate from a
   1024px source with `cargo tauri icon <file>` before release.

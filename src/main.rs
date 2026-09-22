@@ -19,6 +19,8 @@ use url::Url;
 
 mod badge;
 mod chrome;
+mod downloads;
+mod offline;
 #[cfg(windows)]
 mod snap;
 mod steam;
@@ -171,12 +173,13 @@ fn ask_to_leave(app: &AppHandle, answer: impl FnOnce(bool) + Send + 'static) {
         // As tauri-plugin-dialog does it: made on the main thread, awaited
         // off it.
         std::thread::spawn(move || {
-            let leave = match tauri::async_runtime::block_on(shown) {
-                MessageDialogResult::Custom(label) => label == words.leave,
-                // GTK answers with the slot rather than the label.
-                MessageDialogResult::Cancel => true,
-                _ => false,
-            };
+            // Only the Leave button leaves. Esc and the dialog's close box
+            // answer Cancel, and a player dismissing the question has not
+            // agreed to lose their drawing.
+            let leave = matches!(
+                tauri::async_runtime::block_on(shown),
+                MessageDialogResult::Custom(label) if label == words.leave
+            );
             answer(leave);
         });
     });
@@ -280,12 +283,13 @@ fn main() {
             let new_window = (app.handle().clone(), site.clone());
             let page_load = steam.clone();
 
-            let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(loader.into()))
+            let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(loader.clone().into()))
                 .title("Oeee Cafe")
                 .inner_size(1280.0, 860.0)
                 .min_inner_size(800.0, 600.0)
                 .initialization_script(QUIET_CONTEXT_MENU)
-                .initialization_script(chrome::script(std::env::consts::OS));
+                .initialization_script(chrome::script(std::env::consts::OS))
+                .initialization_script(offline::page_script());
             let builder = match steam {
                 Some(_) => builder.initialization_script(steam::MARK_PAGE),
                 None => builder,
@@ -312,8 +316,16 @@ fn main() {
                         steam.show_presence(&answer);
                     });
                 })
+                // Saved where the player says, and never a replay file
+                // (downloads.rs).
+                .on_download(|webview, event| downloads::handle(&webview, event))
                 .on_navigation(move |url| {
                     let (app, site, steam) = &navigation;
+                    // Not in the window and not in the browser, which would
+                    // download it.
+                    if downloads::is_replay(url) {
+                        return false;
+                    }
                     if let (Some(steam), Some(next)) = (steam, steam::sign_in_link(url, site)) {
                         sign_in_with_steam(app, steam.clone(), next);
                         return false;
@@ -329,6 +341,9 @@ fn main() {
                 // so a page of the site replaces the current one instead.
                 .on_new_window(move |url, _features| {
                     let (app, site) = &new_window;
+                    if downloads::is_replay(&url) {
+                        return NewWindowResponse::Deny;
+                    }
                     if stays_in_app(&url, site) {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.navigate(url);
@@ -364,6 +379,28 @@ fn main() {
 
             #[cfg(windows)]
             window.with_webview(|webview| webview2::quiet_the_browser(&webview))?;
+
+            // A page of the site that could not be reached goes back to the
+            // loader, which says so and tries it again (offline.rs).
+            #[cfg(windows)]
+            {
+                // Where WebView2 serves the bundled loader from; the window
+                // has not loaded it yet, so it cannot be asked.
+                let loader = Url::parse("http://tauri.localhost/")
+                    .and_then(|origin| origin.join(&loader))
+                    .expect("the loader's address is a valid URL");
+                let (unreachable_window, site) = (window.clone(), site.clone());
+                window.with_webview(move |webview| {
+                    webview2::on_unreachable(&webview, move |page| {
+                        let Ok(page) = Url::parse(&page) else {
+                            return;
+                        };
+                        if page.origin() == site.origin() {
+                            let _ = unreachable_window.navigate(offline::loader_for(&loader, &page));
+                        }
+                    });
+                })?;
+            }
 
             // Snap Layouts on the toolbar's maximise button (snap.rs), kept
             // over the button wherever the page says it is.
