@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   The MSIX package's manifest. package.ps1 fills in the $…$ values: the
-  identity from Partner Center (Product management > Product identity) and
-  the version from tauri.conf.json.
+  identity from Partner Center (Product management > Product identity), the
+  version from tauri.conf.json, and each package's architecture.
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -14,7 +14,7 @@
     Name="$IDENTITY_NAME$"
     Publisher="$PUBLISHER$"
     Version="$VERSION$"
-    ProcessorArchitecture="x64" />
+    ProcessorArchitecture="$ARCHITECTURE$" />
 
   <Properties>
     <DisplayName>Oeee Cafe</DisplayName>

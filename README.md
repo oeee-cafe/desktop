@@ -121,21 +121,26 @@ the build goes live on in Steamworks (SteamPipe > Builds).
 
 ## Building for the Microsoft Store
 
-The Store gets an MSIX of the app without Steam, packed on Windows by
-`msstore/package.ps1` from the manifest in `msstore/AppxManifest.xml` and the
-images in `msstore/Assets/`. It needs Rust, the Tauri CLI and the Windows
-SDK, and the package's identity from Partner Center (Product management >
-Product identity):
+The Store gets an MSIX bundle of the app without Steam: an x64 package and
+an ARM64 one, of which Windows installs the one that suits the machine.
+`msstore/package.ps1` packs it on Windows from the manifest in
+`msstore/AppxManifest.xml` and the images in `msstore/Assets/`. It needs
+Rust with both Windows targets, the Tauri CLI, Visual Studio's C++ build
+tools for x64 and ARM64 (the "MSVC ... ARM64 build tools" component), the
+Windows SDK, and the package's identity from Partner Center (Product
+management > Product identity):
 
 ```powershell
+rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc
 $env:MSSTORE_IDENTITY_NAME = '...'
 $env:MSSTORE_PUBLISHER = 'CN=...'
 $env:MSSTORE_PUBLISHER_DISPLAY_NAME = '...'
 .\msstore\package.ps1
 ```
 
-The package lands in `target\msstore\`, unsigned: upload it to the
-submission's Packages page and the Store signs it. Its version is
+The `.msixbundle` lands in `target\msstore\`, unsigned: upload it to the
+submission's Packages page and the Store signs it. `-Architectures x64`
+packs one architecture only, for trying it quicker. Its version is
 `tauri.conf.json`'s with a `.0` after it, which the Store requires; raise
 the version for each submission. To install it on your own machine first,
 make a certificate with the Publisher value as its subject, trust it, and
@@ -161,7 +166,8 @@ changing it.
   themselves, and the close and quit question there goes through `rfd`; none
   of it has run on either yet.
 - **The MSIX.** `msstore/package.ps1` was written on macOS and has not run
-  yet; nor has the app, packaged, on Windows (WebView2's data under the
+  yet (both Windows targets only compile, with `cargo check`); nor has the
+  app, packaged, on Windows or Windows on ARM (WebView2's data under the
   package's virtualised `%LOCALAPPDATA%`, the taskbar icons, the unread dot).
 - **Downloads.** Saving an image or `.pch` from the site has not been tried in
   the webview.

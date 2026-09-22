@@ -1,22 +1,28 @@
 <#
-Builds the app without Steam and packs it as an MSIX for the Microsoft Store.
-Run on Windows, with Rust, the Tauri CLI and the Windows SDK (for makepri,
-makeappx and signtool):
+Builds the app without Steam, for x64 and ARM64, and packs both into an
+MSIX bundle for the Microsoft Store. Run on Windows, with Rust and both its
+Windows targets, the Tauri CLI, Visual Studio's C++ build tools for x64 and
+ARM64, and the Windows SDK (for makepri, makeappx and signtool):
 
+  rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc
   $env:MSSTORE_IDENTITY_NAME = '...'           # Package/Identity/Name
   $env:MSSTORE_PUBLISHER = 'CN=...'            # Package/Identity/Publisher
   $env:MSSTORE_PUBLISHER_DISPLAY_NAME = '...'  # Package/Properties/PublisherDisplayName
   .\msstore\package.ps1
 
 The three values are in Partner Center (Product management > Product
-identity). The package goes to target\msstore\ unsigned, as the Store takes
+identity). The bundle goes to target\msstore\ unsigned, as the Store takes
 it: the Store signs it. To install it on this machine first, sign it with a
 certificate whose subject is MSSTORE_PUBLISHER and that the machine trusts:
 
   .\msstore\package.ps1 -Pfx dev.pfx           # password in $env:MSSTORE_PFX_PASSWORD
+
+-Architectures x64 (or arm64) builds one only, to try it quicker.
 #>
 param(
-  [string]$Pfx
+  [string]$Pfx,
+  [ValidateSet('x64', 'arm64')]
+  [string[]]$Architectures = @('x64', 'arm64')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,7 +30,12 @@ Set-StrictMode -Version Latest
 
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $root 'target\msstore'
-$layout = Join-Path $out 'layout'
+
+# Each package's architecture, as the manifest names it, and Rust's.
+$triples = @{
+  'x64'   = 'x86_64-pc-windows-msvc'
+  'arm64' = 'aarch64-pc-windows-msvc'
+}
 
 function Need([string]$name) {
   $value = [Environment]::GetEnvironmentVariable($name)
@@ -59,41 +70,58 @@ $packageVersion = "$version.0"
 $makepri = SdkTool 'makepri.exe'
 $makeappx = SdkTool 'makeappx.exe'
 
-# Without Steam: its library is not in the package, and the app never asks
-# for it (README.md).
-Push-Location $root
-try {
-  Run 'cargo' 'tauri' 'build' '--no-bundle' '--' '--no-default-features'
-} finally {
-  Pop-Location
-}
-
-# What goes in the package: the program, its images and its manifest.
-if (Test-Path $layout) { Remove-Item $layout -Recurse -Force }
-New-Item $layout -ItemType Directory | Out-Null
-Copy-Item (Join-Path $root 'target\release\oeee-cafe-desktop.exe') $layout
-Copy-Item (Join-Path $PSScriptRoot 'Assets') $layout -Recurse
-
-$manifest = Get-Content (Join-Path $PSScriptRoot 'AppxManifest.xml') -Raw
-$manifest = $manifest.Replace('$IDENTITY_NAME$', [Security.SecurityElement]::Escape($identity))
-$manifest = $manifest.Replace('$PUBLISHER$', [Security.SecurityElement]::Escape($publisher))
-$manifest = $manifest.Replace('$PUBLISHER_DISPLAY_NAME$', [Security.SecurityElement]::Escape($publisherDisplayName))
-$manifest = $manifest.Replace('$VERSION$', $packageVersion)
-[IO.File]::WriteAllText((Join-Path $layout 'AppxManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))
+$template = Get-Content (Join-Path $PSScriptRoot 'AppxManifest.xml') -Raw
+$template = $template.Replace('$IDENTITY_NAME$', [Security.SecurityElement]::Escape($identity))
+$template = $template.Replace('$PUBLISHER$', [Security.SecurityElement]::Escape($publisher))
+$template = $template.Replace('$PUBLISHER_DISPLAY_NAME$', [Security.SecurityElement]::Escape($publisherDisplayName))
+$template = $template.Replace('$VERSION$', $packageVersion)
 
 # The index Windows picks each image's variant from (assets.sh names them).
 $priconfig = Join-Path $out 'priconfig.xml'
+New-Item $out -ItemType Directory -Force | Out-Null
 Run $makepri 'createconfig' '/cf' $priconfig '/dq' 'en-US' '/pv' '10.0.0' '/o'
-Run $makepri 'new' '/pr' $layout '/cf' $priconfig '/mn' (Join-Path $layout 'AppxManifest.xml') '/of' (Join-Path $layout 'resources.pri') '/o'
 
-$msix = Join-Path $out "OeeeCafe_${packageVersion}_x64.msix"
-Run $makeappx 'pack' '/d' $layout '/p' $msix '/o'
+# One package per architecture, all in one folder for the bundle.
+$packages = Join-Path $out 'packages'
+if (Test-Path $packages) { Remove-Item $packages -Recurse -Force }
+New-Item $packages -ItemType Directory | Out-Null
+
+foreach ($arch in $Architectures) {
+  $triple = $triples[$arch]
+
+  # Without Steam: its library is not in the package, and the app never
+  # asks for it (README.md).
+  Push-Location $root
+  try {
+    Run 'cargo' 'tauri' 'build' '--no-bundle' '--target' $triple '--' '--no-default-features'
+  } finally {
+    Pop-Location
+  }
+
+  # What goes in the package: the program, its images and its manifest.
+  $layout = Join-Path $out "layout-$arch"
+  if (Test-Path $layout) { Remove-Item $layout -Recurse -Force }
+  New-Item $layout -ItemType Directory | Out-Null
+  Copy-Item (Join-Path $root "target\$triple\release\oeee-cafe-desktop.exe") $layout
+  Copy-Item (Join-Path $PSScriptRoot 'Assets') $layout -Recurse
+
+  $manifest = $template.Replace('$ARCHITECTURE$', $arch)
+  [IO.File]::WriteAllText((Join-Path $layout 'AppxManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))
+  Run $makepri 'new' '/pr' $layout '/cf' $priconfig '/mn' (Join-Path $layout 'AppxManifest.xml') '/of' (Join-Path $layout 'resources.pri') '/o'
+
+  Run $makeappx 'pack' '/d' $layout '/p' (Join-Path $packages "OeeeCafe_${packageVersion}_$arch.msix") '/o'
+}
+
+# The Store takes one upload for every architecture, and Windows installs
+# the package in it that suits the machine.
+$bundle = Join-Path $out "OeeeCafe_${packageVersion}.msixbundle"
+Run $makeappx 'bundle' '/d' $packages '/p' $bundle '/bv' $packageVersion '/o'
 
 if ($Pfx) {
   $signtool = SdkTool 'signtool.exe'
   $sign = @('sign', '/fd', 'SHA256', '/f', (Resolve-Path $Pfx).Path)
   if ($env:MSSTORE_PFX_PASSWORD) { $sign += @('/p', $env:MSSTORE_PFX_PASSWORD) }
-  Run $signtool @sign $msix
+  Run $signtool @sign $bundle
 }
 
-Write-Host "packed $msix"
+Write-Host "packed $bundle"
