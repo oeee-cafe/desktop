@@ -12,15 +12,17 @@ site, so what it shows is always what is deployed.
   replaces `window.confirm` on every page with one that returns a Promise,
   which htmx takes as "yes".
 - A page that would stop a browser leaving it (the painter, with an unsaved
-  drawing) is asked about before the window closes or the app quits, and the
-  player can stay.
+  drawing) is asked about before the window closes, and the player can stay.
 - The browser shows through as little as it can: no right-click menu except
   on text fields, selections and images; on Windows, no F5, Ctrl+F, Ctrl+P,
   autofill suggestions or offer to save a password (`src/webview2.rs`); and
   a window background matching the site's theme, so a load does not flash.
-- On macOS, `alert()`, `confirm()` and the `beforeunload` prompt are native
-  dialogs (`src/macos.rs`). WKWebView shows none of them on its own, and
-  wry's delegate leaves them out.
+- On Windows the site's toolbar is the title bar: the window has none of its
+  own, and minimise, maximise and close are drawn at the toolbar's end
+  (`src/caption.js`), with Snap Layouts on maximise (`src/snap.rs`).
+
+There is no macOS build: on the Mac, Oeee Cafe is the
+[iOS app](https://github.com/oeee-cafe/ios) as a universal app.
 
 ## Signing in with Steam
 
@@ -45,7 +47,7 @@ register it.
 Without Steam, the app starts as before and the link never shows. Steam's
 library still has to be beside the binary: the app links it and will not
 start without it. `build.rs` puts it in `target/<profile>/`, and
-`tauri.conf.json` puts it in the macOS and Linux bundles; see the table below
+`tauri.conf.json` puts it in the Linux bundle; see the table below
 for Windows. The copies in `steam/redistributable/` are the ones the
 `steamworks` crate was built against; replace them together with it.
 
@@ -110,19 +112,17 @@ cargo tauri build
 | Platform | Bundle | What goes in `steam/content/<platform>/` |
 | --- | --- | --- |
 | Windows | `target/release/oeee-cafe-desktop.exe` | the `.exe` and `steam/redistributable/win64/steam_api64.dll` beside it; WebView2 ships with Windows 10 and 11 |
-| macOS | `target/release/bundle/macos/Oeee Cafe.app` | the `.app` |
 | Linux | `target/release/bundle/appimage/*.AppImage` | the AppImage |
 
 Steam installs files; it does not run installers, so ship the executable
-(Windows) and the `.app` (macOS) rather than the NSIS installer or a `.dmg`.
-Set each depot's launch option in Steamworks (Installation > General) to the
-file inside it.
+rather than the NSIS installer. Set each depot's launch option in Steamworks
+(Installation > General) to the file inside it.
 
 Then upload:
 
 ```bash
 STEAM_APP_ID=... STEAM_USER=... \
-STEAM_DEPOT_WINDOWS=... STEAM_DEPOT_MACOS=... STEAM_DEPOT_LINUX=... \
+STEAM_DEPOT_WINDOWS=... STEAM_DEPOT_LINUX=... \
 ./steam/upload.sh "0.1.0"
 ```
 
@@ -171,17 +171,13 @@ changing it.
 
 ## Not done yet
 
-- **Leaving the painter on Windows and Linux.** Tested on macOS only. WebView2
-  and WebKitGTK are expected to show `beforeunload` and `confirm()`
-  themselves, and the close and quit question there goes through `rfd`; none
-  of it has run on either yet.
-- **The MSIX.** `msstore/package.ps1` was written on macOS and has not run
-  yet (both Windows targets only compile, with `cargo check`); nor has the
+- **Leaving the painter.** WebView2 and WebKitGTK are expected to show
+  `beforeunload` and `confirm()` themselves, and the question on closing the
+  window goes through `rfd`; none of it has been tried yet.
+- **The MSIX.** `msstore/package.ps1` has not run yet; nor has the
   app, packaged, on Windows or Windows on ARM (WebView2's data under the
   package's virtualised `%LOCALAPPDATA%`, the taskbar icons, the unread dot).
 - **Downloads.** Saving an image or `.pch` from the site has not been tried in
   the webview.
 - **Icons.** Generated from the 256px `static/favicon.png` in oeee-cafe/web; regenerate from a
   1024px source with `cargo tauri icon <file>` before release.
-- **macOS signing and notarisation**, needed for the `.app` to open without a
-  Gatekeeper warning.

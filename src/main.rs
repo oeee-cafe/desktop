@@ -13,20 +13,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use tauri::webview::NewWindowResponse;
-use tauri::{AppHandle, Listener, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Listener, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
 mod badge;
 mod chrome;
-#[cfg(target_os = "macos")]
-mod macos;
-mod menu;
 #[cfg(windows)]
 mod snap;
 mod steam;
-#[cfg(target_os = "macos")]
-mod menu_words;
 #[cfg(windows)]
 mod webview2;
 mod words;
@@ -49,7 +44,7 @@ fn site() -> Url {
 /// sign-ins and an address bar.
 fn stays_in_app(url: &Url, site: &Url) -> bool {
     match url.scheme() {
-        // The bundled loader: tauri://localhost on macOS and Linux,
+        // The bundled loader: tauri://localhost on Linux,
         // http://tauri.localhost on Windows.
         "tauri" | "about" | "data" | "blob" => true,
         "http" | "https" if url.host_str() == Some("tauri.localhost") => true,
@@ -118,7 +113,7 @@ static ASKING: AtomicBool = AtomicBool::new(false);
 
 /// Run `then` once the page has agreed to go, asking the player first if it
 /// holds something unsaved.
-pub(crate) fn after_leaving(app: &AppHandle, then: impl FnOnce(&AppHandle) + Send + 'static) {
+fn after_leaving(app: &AppHandle, then: impl FnOnce(&AppHandle) + Send + 'static) {
     let Some(window) = app.get_webview_window("main") else {
         return then(app);
     };
@@ -154,15 +149,6 @@ pub(crate) fn after_leaving(app: &AppHandle, then: impl FnOnce(&AppHandle) + Sen
 }
 
 /// Ask the player whether to leave anyway, and pass `answer` their choice.
-#[cfg(target_os = "macos")]
-fn ask_to_leave(app: &AppHandle, answer: impl FnOnce(bool) + Send + 'static) {
-    // The same alert the page's own `beforeunload` gets, so leaving by the
-    // close button and leaving by a link ask in the same words.
-    let _ = app.run_on_main_thread(move || answer(macos::confirm_leaving()));
-}
-
-/// Ask the player whether to leave anyway, and pass `answer` their choice.
-#[cfg(not(target_os = "macos"))]
 fn ask_to_leave(app: &AppHandle, answer: impl FnOnce(bool) + Send + 'static) {
     use rfd::{AsyncMessageDialog, MessageButtons, MessageDialogResult, MessageLevel};
 
@@ -243,7 +229,6 @@ fn main() {
     // Before any window, as Steam asks, so its overlay can find them.
     let steam = steam::start();
     let site = site();
-    let menu_site = site.clone();
 
     tauri::Builder::default()
         // First, as the plugin asks: a second launch hands over here and
@@ -268,7 +253,6 @@ fn main() {
                 )
                 .build(),
         )
-        .on_menu_event(move |app, event| menu::handle(app, event, &menu_site))
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             let loader = format!(
@@ -306,25 +290,12 @@ fn main() {
                 Some(_) => builder.initialization_script(steam::MARK_PAGE),
                 None => builder,
             };
-            // The title bar goes transparent and the traffic lights move into
-            // the site's toolbar. wry keeps the buttons where the system put
-            // them inside a title bar it makes `y` taller, so their centre
-            // lands 2.5pt above `y`, measured: 28.5 centres them at 26, the
-            // middle of the 52pt toolbar and of its tabs.
             // On Windows the title bar goes altogether: the toolbar is the
             // title bar, and draws the window's controls at its right end
             // (caption.js). The window keeps its shadow, and with it the
             // system's resize edges.
             #[cfg(windows)]
             let builder = builder.decorations(false).shadow(true);
-            #[cfg(target_os = "macos")]
-            let builder = builder
-                .title_bar_style(tauri::TitleBarStyle::Overlay)
-                .hidden_title(true)
-                // A force click on a link opens WebKit's preview of the page,
-                // which is a browser's gesture, not an application's.
-                .allow_link_preview(false)
-                .traffic_light_position(tauri::LogicalPosition::new(20.0, 28.5));
             let window = builder
                 // Edge's address and contact suggestions over form fields.
                 .general_autofill_enabled(false)
@@ -405,19 +376,6 @@ fn main() {
                     let _ = handle.run_on_main_thread(move || snap::place(place));
                 });
             }
-
-            #[cfg(target_os = "macos")]
-            window.with_webview(|webview| unsafe {
-                macos::install_dialogs(&*webview.inner().cast::<objc2_web_kit::WKWebView>());
-            })?;
-            #[cfg(target_os = "macos")]
-            unsafe {
-                macos::guard_quit(app.handle());
-            }
-            // The menu bar is macOS's; on Windows and Linux a menu would sit
-            // in a bar under the title bar, and the site's own keys serve.
-            #[cfg(target_os = "macos")]
-            app.set_menu(menu::build(app.handle())?)?;
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -434,19 +392,8 @@ fn main() {
                 });
             }
         })
-        .build(tauri::generate_context!())
-        .expect("error while building Oeee Cafe")
-        .run(|app, event| {
-            // Quitting (Cmd+Q, the Dock) rather than closing: no code yet
-            // means the player asked for it, and the page has not been asked.
-            if let RunEvent::ExitRequested {
-                code: None, api, ..
-            } = event
-            {
-                api.prevent_exit();
-                after_leaving(app, |app| app.exit(0));
-            }
-        });
+        .run(tauri::generate_context!())
+        .expect("error while running Oeee Cafe");
 }
 
 #[cfg(test)]

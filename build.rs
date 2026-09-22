@@ -11,13 +11,11 @@ fn main() {
 /// links it dynamically and does not start without it -- even when Steam is
 /// not running, which the app itself takes in its stride -- so `cargo run` and
 /// `cargo test` need it in `target/<profile>/` just as a bundle does. Bundles
-/// get it from `tauri.conf.json` (macOS, Linux) and the depot (Windows).
+/// get it from `tauri.conf.json` (Linux) and the depot (Windows).
 fn steam_api_beside_the_binary() {
     let target = std::env::var("TARGET").unwrap();
     let (dir, file) = if target.contains("windows") {
         ("win64", "steam_api64.dll")
-    } else if target.contains("apple") {
-        ("osx", "libsteam_api.dylib")
     } else {
         ("linux64", "libsteam_api.so")
     };

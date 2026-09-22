@@ -3,8 +3,8 @@
 //! The site says how many notifications are unread (chrome.rs sends the
 //! number in its toolbar's badge as an `oeee-unread` event whenever it
 //! changes), and the app puts it where each system puts one: a number on
-//! the Dock icon on macOS and on the launcher's on Linux, and on Windows --
-//! whose taskbar has no numbers -- a red dot over the taskbar button.
+//! the launcher's icon on Linux, and on Windows -- whose taskbar has no
+//! numbers -- a red dot over the taskbar button.
 
 use tauri::{Runtime, WebviewWindow};
 

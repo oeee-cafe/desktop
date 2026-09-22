@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Upload built bundles to Steam with SteamPipe.
 #
-#   STEAM_APP_ID=...  STEAM_DEPOT_WINDOWS=...  STEAM_DEPOT_MACOS=...
-#   STEAM_DEPOT_LINUX=...  STEAM_USER=...  ./steam/upload.sh [description]
+#   STEAM_APP_ID=...  STEAM_DEPOT_WINDOWS=...  STEAM_DEPOT_LINUX=...
+#   STEAM_USER=...  ./steam/upload.sh [description]
 #
 # The IDs are on the app's Steamworks page (SteamPipe > Depots). A depot whose
 # variable is unset, or whose content folder is empty, is left out, so one
@@ -43,7 +43,6 @@ add_depot() {
     }"
 }
 add_depot "${STEAM_DEPOT_WINDOWS:-}" windows
-add_depot "${STEAM_DEPOT_MACOS:-}" macos
 add_depot "${STEAM_DEPOT_LINUX:-}" linux
 
 if [ -z "$depots" ]; then

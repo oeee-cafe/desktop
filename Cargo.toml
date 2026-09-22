@@ -33,7 +33,6 @@ serde = { version = "1", features = ["derive"] }
 # What tauri-plugin-dialog shows its dialogs with, without the plugin: it
 # replaces `window.confirm` in every page, the site's included, with one that
 # returns a Promise, and htmx reads a Promise as yes.
-[target.'cfg(not(target_os = "macos"))'.dependencies]
 rfd = { version = "0.16", default-features = false, features = ["gtk3", "common-controls-v6"] }
 
 # The same versions wry uses, for the WebView2 settings Tauri does not expose,
@@ -47,15 +46,6 @@ windows = { version = "0.61", features = [
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
 ] }
-
-# The same versions wry uses, so these are the classes it built its webview
-# from rather than a second copy of them.
-[target.'cfg(target_os = "macos")'.dependencies]
-block2 = "0.6"
-objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSAlert", "NSApplication", "NSResponder", "NSRunningApplication"] }
-objc2-foundation = { version = "0.3", features = ["NSString"] }
-objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKUIDelegate", "objc2-app-kit"] }
 
 [profile.release]
 codegen-units = 1

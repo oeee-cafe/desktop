@@ -4,12 +4,6 @@
 //! as every other native dialog on the machine does.
 
 pub struct Words {
-    // Only the macOS `alert()` and `confirm()` panels have buttons of their
-    // own to name; elsewhere the webview draws those.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    pub ok: &'static str,
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    pub cancel: &'static str,
     pub leave_title: &'static str,
     pub leave_body: &'static str,
     pub leave: &'static str,
@@ -19,8 +13,6 @@ pub struct Words {
 }
 
 const EN: Words = Words {
-    ok: "OK",
-    cancel: "Cancel",
     leave_title: "Leave this page?",
     leave_body: "Anything you have not saved will be lost.",
     leave: "Leave",
@@ -29,8 +21,6 @@ const EN: Words = Words {
 };
 
 const KO: Words = Words {
-    ok: "확인",
-    cancel: "취소",
     leave_title: "이 페이지를 떠날까요?",
     leave_body: "저장하지 않은 내용은 사라집니다.",
     leave: "떠나기",
@@ -39,8 +29,6 @@ const KO: Words = Words {
 };
 
 const JA: Words = Words {
-    ok: "OK",
-    cancel: "キャンセル",
     leave_title: "このページを離れますか？",
     leave_body: "保存していない内容は失われます。",
     leave: "離れる",
@@ -49,8 +37,6 @@ const JA: Words = Words {
 };
 
 const ZH: Words = Words {
-    ok: "确定",
-    cancel: "取消",
     leave_title: "要离开此页面吗？",
     leave_body: "未保存的内容将会丢失。",
     leave: "离开",

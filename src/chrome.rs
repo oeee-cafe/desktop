@@ -1,13 +1,10 @@
 //! Where the window ends and the site begins.
 //!
 //! The site's toolbar is drawn as a window's title bar, and every page has it
-//! -- the painter pages too -- so on macOS the window's own title bar steps
-//! aside: it goes transparent, and the traffic lights sit inside the toolbar,
-//! at its left.
-//!
-//! On Windows the window has no title bar at all, and its minimise,
-//! maximise and close buttons are drawn at the toolbar's right end instead
-//! (caption.js).
+//! -- the painter pages too -- so on Windows the window has no title bar of
+//! its own: its minimise, maximise and close buttons are drawn at the
+//! toolbar's right end instead (caption.js). On Linux the system's title bar
+//! stays, over the toolbar.
 //!
 //! The site knows nothing about any of this. It is told only which platform
 //! it is in (`data-desktop` on its root element), and the app marks the
@@ -15,11 +12,11 @@
 
 use url::Url;
 
-/// Runs at the start of every page: tells the site where it is, makes room
-/// for the traffic lights, and makes the toolbar's empty space drag the
-/// window. `deep` lets the whole bar drag while its links, buttons and menu
-/// stay clickable; htmx replaces the body on boosted navigation, so the
-/// toolbar is marked again whenever the document changes.
+/// Runs at the start of every page: tells the site where it is, and makes
+/// the toolbar's empty space drag the window. `deep` lets the whole bar drag
+/// while its links, buttons and menu stay clickable; htmx replaces the body
+/// on boosted navigation, so the toolbar is marked again whenever the
+/// document changes.
 pub fn script(os: &str) -> String {
     let mut script = platform_script(os);
     // On Windows the window has no title bar of its own, and the toolbar
@@ -38,18 +35,15 @@ const WINDOWS_CAPTION: &str = include_str!("caption.js");
 fn platform_script(os: &str) -> String {
     format!(
         r##"(function () {{
-  // WebView2 runs this before the document has its root element (WebKit
-  // after), so the page is marked once the root arrives, and the document
-  // itself is what is watched.
+  // WebView2 runs this before the document has its root element, so the
+  // page is marked once the root arrives, and the document itself is what
+  // is watched.
   var started = false;
   function start() {{
     var root = document.documentElement;
     if (started || !root) return;
     started = true;
     root.setAttribute("data-desktop", "{os}");
-    var style = document.createElement("style");
-    style.textContent = 'html[data-desktop="macos"] .nav-bar #menubar {{ padding-left: 96px; }}';
-    (document.head || root).appendChild(style);
   }}
   // The unread count the toolbar shows, sent to the app for its icon
   // (badge.rs) whenever it changes -- it is swapped in by the handlers that
@@ -112,12 +106,12 @@ mod tests {
 
     #[test]
     fn the_script_names_the_platform() {
-        assert!(script("macos").contains(r#"setAttribute("data-desktop", "macos")"#));
+        assert!(script("linux").contains(r#"setAttribute("data-desktop", "linux")"#));
     }
 
     #[test]
     fn the_toolbar_reports_its_unread_count() {
-        assert!(script("macos").contains(r#"event: "oeee-unread""#));
+        assert!(script("linux").contains(r#"event: "oeee-unread""#));
         assert_eq!(crate::badge::EVENT, "oeee-unread");
     }
 
@@ -125,7 +119,6 @@ mod tests {
     fn only_windows_draws_the_window_controls() {
         assert!(script("windows").contains("oeee-caption"));
         assert!(script("windows").contains(r#"invoke("close")"#));
-        assert!(!script("macos").contains("oeee-caption"));
         assert!(!script("linux").contains("oeee-caption"));
     }
 }
