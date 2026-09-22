@@ -198,7 +198,7 @@ Get-AppxPackage -Name $env:MSSTORE_IDENTITY_NAME | Remove-AppxPackage
 
 Packaged, the app keeps WebView2's data and the window's place in the
 package's own folder (`%LOCALAPPDATA%\Packages\<family>\LocalCache\`), so
-uninstalling takes them with it -- unless `%LOCALAPPDATA%\cafe.oeee.desktop`
+uninstalling takes them with it -- unless `%LOCALAPPDATA%\cafe.oeee`
 already exists, as it does where the app has run unpackaged: Windows lets
 a package change folders it finds there, so on a development machine it
 shares them with `cargo run` and the Steam build.
