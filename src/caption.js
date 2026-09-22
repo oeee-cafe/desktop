@@ -4,10 +4,11 @@
 //
 // The window has no title bar of its own there (main.rs, decorations off),
 // so the toolbar is the title bar: these are drawn to Windows 11's measure,
-// 46px wide and the height of the toolbar's first row, glyphs centred on its
-// line, and close turns red under the pointer as the system's does. On a
-// page with no toolbar -- the loader -- they sit at the top right of the
-// window instead, so it can still be closed before the site arrives.
+// 46px wide and the height of the toolbar's first row, in the system's own
+// glyphs and fills, greyed while the window is in the background, and close
+// turns red under the pointer. On a page with no toolbar -- the loader --
+// they sit at the top right of the window instead, so it can still be
+// closed before the site arrives.
 //
 // They ask the app to do the thing (Tauri's window commands, which the
 // window's capabilities allow and nothing more); close goes through the same
@@ -30,12 +31,19 @@
     ".oeee-caption.is-loose { position: fixed; }",
     ".oeee-caption button { display: flex; align-items: center; justify-content: center;" +
       " width: 46px; height: 100%; margin: 0; padding: 0; border: 0; border-radius: 0;" +
-      " background: transparent; color: var(--ds-ink, #22223a); box-shadow: none; cursor: default; }",
-    ".oeee-caption button:hover { background: var(--ds-hover, rgba(60, 60, 150, 0.08)); }",
-    ".oeee-caption button:active { background: var(--ds-selected, rgba(60, 60, 150, 0.15)); }",
+      " background: transparent; color: var(--ds-ink, #22223a); box-shadow: none; cursor: default;" +
+      ' font: 400 10px/1 "Segoe Fluent Icons", "Segoe MDL2 Assets"; -webkit-font-smoothing: auto; }',
+    // Windows 11's own fills, in the toolbar's ink whichever the site's
+    // theme: a faint wash under the pointer, fainter pressed with the glyph
+    // dimmed, and on close its red, the glyph dimmed when pressed there too.
+    ".oeee-caption button:hover { background: color-mix(in srgb, currentColor 6%, transparent); }",
+    ".oeee-caption button:active { background: color-mix(in srgb, currentColor 4%, transparent); }",
+    ".oeee-caption button:active span { opacity: 0.7; }",
     ".oeee-caption button.is-close:hover { background: #c42b1c; color: #ffffff; }",
-    ".oeee-caption button.is-close:active { background: #b3261e; color: #ffffff; }",
-    ".oeee-caption svg { display: block; }",
+    ".oeee-caption button.is-close:active { background: rgba(196, 43, 28, 0.9); color: #ffffff; }",
+    // A window in the background greys its controls until one is pointed at.
+    ".oeee-caption.is-inactive button:not(:hover) span { opacity: 0.4; }",
+    ".oeee-caption span { display: block; pointer-events: none; }",
   ].join("\n");
   // This runs before the document has its root element (chrome.rs), so the
   // style goes in once there is somewhere to put it.
@@ -45,15 +53,17 @@
     (document.head || root).appendChild(style);
   }
 
+  // The system's own glyphs, from the font Windows draws its title bars
+  // with (Segoe Fluent Icons; Segoe MDL2 Assets on Windows 10, at the same
+  // code points), so they are hairlines at every scale as the system's are.
   var GLYPHS = {
-    minimize: '<path d="M0 5.5h10" />',
-    maximize: '<rect x="0.5" y="0.5" width="9" height="9" />',
-    restore: '<path d="M2.5 2.5V0.5h7v7h-2" /><rect x="0.5" y="2.5" width="7" height="7" />',
-    close: '<path d="M0.5 0.5l9 9M9.5 0.5l-9 9" />',
+    minimize: "",
+    maximize: "",
+    restore: "",
+    close: "",
   };
   function glyph(name) {
-    return '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor"' +
-      ' stroke-width="1" shape-rendering="crispEdges" aria-hidden="true">' + GLYPHS[name] + "</svg>";
+    return '<span aria-hidden="true">' + GLYPHS[name] + "</span>";
   }
   var LABELS = {
     en: { minimize: "Minimize", maximize: "Maximize", restore: "Restore", close: "Close" },
@@ -77,9 +87,14 @@
     b.addEventListener("mousedown", function (event) { event.stopPropagation(); });
     return b;
   }
+  var active = document.hasFocus();
+  function showActive() {
+    var box = document.getElementById("oeee-caption");
+    if (box) box.classList.toggle("is-inactive", !active);
+  }
   function build() {
     var box = document.createElement("div");
-    box.className = "oeee-caption";
+    box.className = active ? "oeee-caption" : "oeee-caption is-inactive";
     box.id = "oeee-caption";
     box.appendChild(button("minimize", function () { invoke("minimize"); }));
     box.appendChild(button("maximize", function () { invoke("toggle_maximize"); }));
@@ -127,4 +142,6 @@
   });
   new MutationObserver(place).observe(document, { childList: true, subtree: true });
   window.addEventListener("resize", refreshMaximized);
+  window.addEventListener("focus", function () { active = true; showActive(); });
+  window.addEventListener("blur", function () { active = false; showActive(); });
 })();
