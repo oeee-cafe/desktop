@@ -7,6 +7,13 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/oeee-cafe/desktop"
 description = "Oeee Cafe for Steam: a window onto oeee.cafe"
 
+# Steam: signing in, rich presence, and Steam's library beside the binary,
+# which the app then cannot start without. A build for the Microsoft Store
+# leaves it out with `--no-default-features`.
+[features]
+default = ["steam"]
+steam = ["dep:steamworks"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -19,7 +26,7 @@ tauri-plugin-window-state = "2"
 tauri-plugin-single-instance = "2"
 sys-locale = "0.3"
 url = "2"
-steamworks = "0.13.1"
+steamworks = { version = "0.13.1", optional = true }
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 

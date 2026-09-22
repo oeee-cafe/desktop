@@ -42,6 +42,10 @@ for Windows. The copies in `steam/redistributable/` are the ones the
 To have Steam start a development build, put the app id in a
 `steam_appid.txt` in the directory you run it from.
 
+Everything Steam is behind the `steam` feature, on by default. A build
+without it (`--no-default-features`, as for the Microsoft Store) neither
+links nor needs Steam's library, and never marks a page `data-steam-app`.
+
 ## Rich presence
 
 The site says what each page is in `<meta name="oeee-presence">`: drawing,

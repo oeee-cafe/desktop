@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
 fn main() {
-    steam_api_beside_the_binary();
+    if std::env::var_os("CARGO_FEATURE_STEAM").is_some() {
+        steam_api_beside_the_binary();
+    }
     tauri_build::build()
 }
 

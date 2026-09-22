@@ -16,117 +16,40 @@
 //! the same window onto the site it always was, and the link is never shown:
 //! the site draws it only on a page the app has marked `data-steam-app`.
 
-use std::sync::mpsc::{self, Sender};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+// Without the `steam` feature, what reads pages and writes scripts for Steam
+// is still built and tested, and nothing calls it.
+#![cfg_attr(not(feature = "steam"), allow(dead_code))]
 
 use serde::Deserialize;
-use steamworks::{AuthTicket, CallbackHandle, Client, TicketForWebApiResponse};
 use url::Url;
 
-/// Names the service the ticket is for; the site accepts no other. Has to
-/// match `TICKET_IDENTITY` in oeee-cafe/web's `src/steam.rs`.
-const STEAM_TICKET_IDENTITY: &str = "oeee-cafe";
+#[cfg(feature = "steam")]
+mod client;
+#[cfg(feature = "steam")]
+pub use client::{start, Steam};
 
 /// The path of the site's "Sign in with Steam" link.
 const SIGN_IN_PATH: &str = "/auth/steam/app";
 
-/// How long Steam gets to hand over a ticket. It usually answers within a
-/// second; a player waiting longer than this is better told it failed.
-const TICKET_TIMEOUT: Duration = Duration::from_secs(15);
+/// Steam, in a build without it (the Microsoft Store's): there is never one,
+/// so the app is only ever the window onto the site.
+#[cfg(not(feature = "steam"))]
+pub enum Steam {}
 
-type Waiting = Arc<Mutex<Vec<(AuthTicket, Sender<Result<Vec<u8>, String>>)>>>;
-
-pub struct Steam {
-    client: Client,
-    waiting: Waiting,
-    _ticket_callback: CallbackHandle,
-}
-
-/// Starts Steam's API, or says why not and carries on without it.
-pub fn start() -> Option<Arc<Steam>> {
-    let client = match Client::init() {
-        Ok(client) => client,
-        Err(error) => {
-            eprintln!("running without Steam: {error}");
-            return None;
-        }
-    };
-
-    let waiting: Waiting = Arc::default();
-    let ticket_callback = client.register_callback({
-        let waiting = waiting.clone();
-        move |response: TicketForWebApiResponse| {
-            let reply = {
-                let mut waiting = waiting.lock().unwrap();
-                let Some(at) = waiting.iter().position(|(h, _)| *h == response.ticket_handle) else {
-                    return;
-                };
-                waiting.swap_remove(at).1
-            };
-            let _ = reply.send(match response.result {
-                Ok(()) => {
-                    let len = usize::try_from(response.ticket_len).unwrap_or(0);
-                    Ok(response.ticket.get(..len).unwrap_or_default().to_vec())
-                }
-                Err(error) => Err(error.to_string()),
-            });
-        }
-    });
-
-    // Callbacks arrive only when asked for. Nothing here is urgent, so ten
-    // times a second is plenty.
-    let pump = client.clone();
-    std::thread::Builder::new()
-        .name("steam-callbacks".into())
-        .spawn(move || loop {
-            pump.run_callbacks();
-            std::thread::sleep(Duration::from_millis(100));
-        })
-        .ok()?;
-
-    Some(Arc::new(Steam {
-        client,
-        waiting,
-        _ticket_callback: ticket_callback,
-    }))
-}
-
+#[cfg(not(feature = "steam"))]
 impl Steam {
-    /// A Web API ticket for the site, hex-encoded. Blocks until Steam
-    /// answers, so it is called off the main thread.
     pub fn web_api_ticket(&self) -> Result<String, String> {
-        let (reply, answer) = mpsc::channel();
-        {
-            // Held across the request, so the callback cannot look for the
-            // handle before it is here to be found.
-            let mut waiting = self.waiting.lock().unwrap();
-            let handle = self
-                .client
-                .user()
-                .authentication_session_ticket_for_webapi(STEAM_TICKET_IDENTITY);
-            waiting.push((handle, reply));
-        }
-        let ticket = answer
-            .recv_timeout(TICKET_TIMEOUT)
-            .map_err(|_| "Steam did not answer".to_string())??;
-        if ticket.is_empty() {
-            return Err("Steam gave an empty ticket".to_string());
-        }
-        Ok(hex(&ticket))
+        match *self {}
+    }
+
+    pub fn show_presence(&self, _answer: &str) {
+        match *self {}
     }
 }
 
-impl Steam {
-    /// Tells Steam what the page says the player is doing. `answer` is what
-    /// [`READ_PRESENCE`] evaluated to, as JSON.
-    pub fn show_presence(&self, answer: &str) {
-        let page: Option<PagePresence> = serde_json::from_str(answer).unwrap_or(None);
-        let friends = self.client.friends();
-        for (key, value) in rich_presence(page.as_ref()) {
-            friends.set_rich_presence(key, value.as_deref());
-        }
-    }
+#[cfg(not(feature = "steam"))]
+pub fn start() -> Option<std::sync::Arc<Steam>> {
+    None
 }
 
 /// Reads the page's presence tag, or null when it has none.
