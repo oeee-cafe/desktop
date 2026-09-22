@@ -74,6 +74,10 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&PredefinedMenuItem::copy(app, Some(w.copy))?)
         .item(&PredefinedMenuItem::paste(app, Some(w.paste))?)
         .item(&PredefinedMenuItem::select_all(app, Some(w.select_all))?)
+        .item(&separator()?)
+        // The site's search, where an application keeps Find: the web view
+        // has no find bar of its own, so the key is free.
+        .item(&command(app, "search", w.search, Some("CmdOrCtrl+F"))?)
         .build()?;
 
     let theme = SubmenuBuilder::new(app, w.theme)
@@ -170,6 +174,7 @@ fn fallback(name: &str) -> Option<&'static str> {
         "communities" => "/communities",
         "together" => "/collaborate",
         "hashtags" => "/hashtags",
+        "search" => "/search",
         "notifications" => "/notifications",
         "drafts" => "/posts/drafts",
         "account" => "/account",
@@ -220,6 +225,13 @@ mod tests {
         let script = script_for("site:communities", &site()).unwrap();
         assert!(script.contains(r#"window.oeeeCommand("communities")"#));
         assert!(script.contains(r#"location.href = "https://oeee.cafe/communities""#));
+    }
+
+    #[test]
+    fn search_asks_the_page_and_falls_back_to_the_search_page() {
+        let script = script_for("site:search", &site()).unwrap();
+        assert!(script.contains(r#"window.oeeeCommand("search")"#));
+        assert!(script.contains(r#"location.href = "https://oeee.cafe/search""#));
     }
 
     #[test]
