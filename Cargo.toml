@@ -36,10 +36,17 @@ serde = { version = "1", features = ["derive"] }
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 rfd = { version = "0.16", default-features = false, features = ["gtk3", "common-controls-v6"] }
 
-# The same versions wry uses, for the WebView2 settings Tauri does not expose.
+# The same versions wry uses, for the WebView2 settings Tauri does not expose,
+# and the window that stands in for the toolbar's maximise button (snap.rs).
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
-windows = "0.61"
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_LibraryLoader",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
 
 # The same versions wry uses, so these are the classes it built its webview
 # from rather than a second copy of them.

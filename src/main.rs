@@ -22,6 +22,8 @@ mod chrome;
 #[cfg(target_os = "macos")]
 mod macos;
 mod menu;
+#[cfg(windows)]
+mod snap;
 mod steam;
 #[cfg(target_os = "macos")]
 mod menu_words;
@@ -391,6 +393,18 @@ fn main() {
 
             #[cfg(windows)]
             window.with_webview(|webview| webview2::quiet_the_browser(&webview))?;
+
+            // Snap Layouts on the toolbar's maximise button (snap.rs), kept
+            // over the button wherever the page says it is.
+            #[cfg(windows)]
+            {
+                snap::attach(&window)?;
+                let handle = app.handle().clone();
+                app.listen_any(snap::EVENT, move |event| {
+                    let place = snap::parse(event.payload());
+                    let _ = handle.run_on_main_thread(move || snap::place(place));
+                });
+            }
 
             #[cfg(target_os = "macos")]
             window.with_webview(|webview| unsafe {

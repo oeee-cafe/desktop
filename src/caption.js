@@ -36,13 +36,15 @@
     // Windows 11's own fills, in the toolbar's ink whichever the site's
     // theme: a faint wash under the pointer, fainter pressed with the glyph
     // dimmed, and on close its red, the glyph dimmed when pressed there too.
-    ".oeee-caption button:hover { background: color-mix(in srgb, currentColor 6%, transparent); }",
-    ".oeee-caption button:active { background: color-mix(in srgb, currentColor 4%, transparent); }",
-    ".oeee-caption button:active span { opacity: 0.7; }",
+    // Maximise is under the app's stand-in (snap.rs), so the pointer never
+    // reaches it, and it is shown hot and pressed when the app says.
+    ".oeee-caption button:hover, .oeee-caption button.is-hot { background: color-mix(in srgb, currentColor 6%, transparent); }",
+    ".oeee-caption button:active, .oeee-caption button.is-pressed { background: color-mix(in srgb, currentColor 4%, transparent); }",
+    ".oeee-caption button:active span, .oeee-caption button.is-pressed span { opacity: 0.7; }",
     ".oeee-caption button.is-close:hover { background: #c42b1c; color: #ffffff; }",
     ".oeee-caption button.is-close:active { background: rgba(196, 43, 28, 0.9); color: #ffffff; }",
     // A window in the background greys its controls until one is pointed at.
-    ".oeee-caption.is-inactive button:not(:hover) span { opacity: 0.4; }",
+    ".oeee-caption.is-inactive button:not(:hover):not(.is-hot) span { opacity: 0.4; }",
     ".oeee-caption span { display: block; pointer-events: none; }",
   ].join("\n");
   // This runs before the document has its root element (chrome.rs), so the
@@ -101,14 +103,54 @@
     box.appendChild(button("close", function () { invoke("close"); }));
     return box;
   }
+  function maximizeButton() {
+    return document.querySelector("#oeee-caption .is-maximize");
+  }
   function showMaximized() {
-    var b = document.querySelector('#oeee-caption [data-caption="maximize"], #oeee-caption [data-caption="restore"]');
+    var b = maximizeButton();
     if (!b) return;
     var name = maximized ? "restore" : "maximize";
     b.setAttribute("data-caption", name);
     b.title = words[name];
     b.setAttribute("aria-label", words[name]);
     b.innerHTML = glyph(name);
+    b.classList.toggle("is-hot", pointer === "hot");
+    b.classList.toggle("is-pressed", pointer === "pressed");
+  }
+
+  // Windows offers its Snap Layouts only over what it knows for a maximise
+  // button, so the app keeps a stand-in of its own over this one (snap.rs):
+  // told where the button is, in the window's pixels, whenever that moves,
+  // and telling it back when the pointer is on it or pressing it.
+  var pointer = "";
+  window.__oeeeCaption = {
+    maximizeState: function (state) {
+      pointer = state;
+      showMaximized();
+    },
+  };
+  var reported = "";
+  var reporting = false;
+  function report() {
+    if (reporting) return;
+    reporting = true;
+    requestAnimationFrame(function () {
+      reporting = false;
+      var b = maximizeButton();
+      var r = b && b.getBoundingClientRect();
+      var scale = window.devicePixelRatio || 1;
+      var place = r && r.width > 0 && r.height > 0 ? {
+        x: Math.round(r.left * scale),
+        y: Math.round(r.top * scale),
+        width: Math.round(r.right * scale) - Math.round(r.left * scale),
+        height: Math.round(r.bottom * scale) - Math.round(r.top * scale),
+      } : null;
+      var json = JSON.stringify(place);
+      if (json === reported) return;
+      reported = json;
+      var ipc = window.__TAURI_INTERNALS__;
+      if (ipc) ipc.invoke("plugin:event|emit", { event: "oeee-caption-maximize", payload: place }).catch(function () {});
+    });
   }
   function refreshMaximized() {
     invoke("is_maximized").then(function (value) {
@@ -124,6 +166,7 @@
   function place() {
     addStyle();
     if (!document.body) return;
+    report();
     var bar = document.querySelector(".nav-bar");
     var existing = document.getElementById("oeee-caption");
     if (existing && (bar ? existing.parentNode === bar : existing.parentNode === document.body)) return;
@@ -141,7 +184,10 @@
     refreshMaximized();
   });
   new MutationObserver(place).observe(document, { childList: true, subtree: true });
-  window.addEventListener("resize", refreshMaximized);
+  window.addEventListener("resize", function () {
+    refreshMaximized();
+    report();
+  });
   window.addEventListener("focus", function () { active = true; showActive(); });
   window.addEventListener("blur", function () { active = false; showActive(); });
 })();
