@@ -1,6 +1,7 @@
 //! Steam's API itself, in a build with the `steam` feature: the ticket the
 //! page asks for, the rich presence, handed to Steam as `super` works them out,
-//! the overlay's store page for a DLC, and word of one installed.
+//! the overlay's store page for a DLC, word of one installed, and the
+//! player's country for its price.
 
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
@@ -156,6 +157,14 @@ impl Steam {
     /// not wait on Steam itself -- a ticket, say -- without moving off it.
     pub fn on_dlc_installed(&self, then: impl Fn(u32) + Send + 'static) {
         *self.dlc_listener.lock().unwrap() = Some(Box::new(then));
+    }
+}
+
+impl Steam {
+    /// The player's country as two letters, from where Steam sees them
+    /// connect, for the currency the store's prices are asked in.
+    pub fn country(&self) -> String {
+        self.client.utils().ip_country()
     }
 }
 

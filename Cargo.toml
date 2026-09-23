@@ -7,12 +7,12 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/oeee-cafe/desktop"
 description = "Oeee Cafe for the desktop, on Steam and the Microsoft Store: a window onto oeee.cafe"
 
-# Steam: signing in, rich presence, and Steam's library beside the binary,
-# which the app then cannot start without. A build for the Microsoft Store
-# leaves it out with `--no-default-features`.
+# Steam: signing in, rich presence, the Supporter Pack's price, and Steam's
+# library beside the binary, which the app then cannot start without. A
+# build for the Microsoft Store leaves it out with `--no-default-features`.
 [features]
 default = ["steam"]
-steam = ["dep:steamworks"]
+steam = ["dep:steamworks", "dep:ureq"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -39,20 +39,35 @@ serde = { version = "1", features = ["derive"] }
 rfd = { version = "0.16", default-features = false, features = ["gtk3", "common-controls-v6"] }
 
 # The same versions wry uses, for the WebView2 settings Tauri does not expose,
-# and the window that stands in for the toolbar's maximise button (snap.rs).
+# the window that stands in for the toolbar's maximise button (snap.rs), and
+# in the Microsoft Store's build the Store itself (microsoft.rs).
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
+# Asks Steam's public store API what a DLC costs (steam.rs); Steamworks
+# itself has no way to say. On Windows over the system's own TLS, trusting
+# what Windows trusts, as Edge does.
+ureq = { version = "3", optional = true, default-features = false, features = ["native-tls", "gzip"] }
+# The lists the Store's calls take, which `windows` does not re-export.
+windows-collections = "0.2"
 windows = { version = "0.61", features = [
+  "Foundation_Collections",
+  "Services_Store",
   "Win32_Foundation",
   "Win32_Graphics_Gdi",
+  "Win32_Storage_Packaging_Appx",
   "Win32_System_Com",
   "Win32_System_DataExchange",
   "Win32_System_LibraryLoader",
   "Win32_System_Memory",
   "Win32_System_Ole",
   "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }
+
+# Elsewhere over rustls, so a Linux build needs no OpenSSL.
+[target.'cfg(not(windows))'.dependencies]
+ureq = { version = "3", optional = true }
 
 [profile.release]
 codegen-units = 1

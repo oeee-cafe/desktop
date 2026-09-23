@@ -50,15 +50,21 @@ pub enum Message {
     /// page never asks for them, and anything but "steam" is left alone.
     #[serde(rename = "signIn")]
     SignIn { provider: String },
+    /// What these products cost, through the store the build sells through
+    /// (app_store.jinja), answered with `oeeeApp.store.prices` -- or not at
+    /// all, and the page shows its buttons without a price. Steam app ids
+    /// in the Steam build (steam.rs), Store IDs in the Microsoft Store's
+    /// (microsoft.rs).
+    Prices { products: Vec<String> },
     /// Sell this product, through the store the build sells through
     /// (app_store.jinja). In the Steam build the product is the Steam app id
-    /// of a DLC, and selling it is showing its page in the overlay; the
-    /// Microsoft Store build sells nothing yet and marks no page, so no page
-    /// asks it.
+    /// of a DLC, and selling it is showing its page in the overlay; in the
+    /// Microsoft Store's it is an add-on's Store ID, and selling it is the
+    /// Store's own purchase dialog.
     Purchase { product: String },
-    /// Anything else the site says -- `prices` among it: the page shows its
-    /// button without a price when the app does not answer, which is what
-    /// the contract allows while the app has no way to ask Steam for one.
+    /// Anything else the site says -- `restore` among it, which neither
+    /// store here has: Steam and the Microsoft Store both keep what was
+    /// bought on the account, and the site asks them.
     #[serde(other)]
     Other,
 }
@@ -246,9 +252,20 @@ mod tests {
     }
 
     #[test]
+    fn a_page_asks_what_products_cost() {
+        assert_eq!(
+            parse(&sent(r#"{"v":1,"type":"prices","products":["3456780","9NBLGGH4R315"]}"#)),
+            Some(Message::Prices {
+                products: vec!["3456780".into(), "9NBLGGH4R315".into()]
+            })
+        );
+        assert_eq!(parse(&sent(r#"{"v":1,"type":"prices"}"#)), None);
+        assert_eq!(parse(&sent(r#"{"v":1,"type":"prices","products":[1]}"#)), None);
+    }
+
+    #[test]
     fn what_the_app_does_not_know_is_ignored() {
         for message in [
-            r#"{"v":1,"type":"prices","products":["3456780"]}"#,
             r#"{"v":1,"type":"restore"}"#,
             r#"{"v":1,"type":"steamTicket"}"#,
             r#"{"v":1,"type":"haptic","name":"light"}"#,

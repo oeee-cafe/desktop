@@ -22,7 +22,10 @@
 //! the page a fresh ticket as proof with `oeeeApp.store.purchased`; the site
 //! asks Steam what that account owns, rather than taking the app's word, so
 //! the supporter badge follows at once and nothing the app says can forge
-//! it.
+//! it. Before any of that the page asks `prices`, and the app asks Steam's
+//! public store API what each DLC costs in the player's country (Steam says
+//! which, from where they are), and answers `oeeeApp.store.prices` with
+//! Steam's own formatting of it.
 //!
 //! Without Steam -- started from a terminal, or Steam not running, or the
 //! Microsoft Store's build, which has none -- the app is the same window
@@ -37,6 +40,7 @@
 // is still built and tested, and nothing calls it.
 #![cfg_attr(not(feature = "steam"), allow(dead_code))]
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use tauri::webview::PageLoadEvent;
@@ -44,6 +48,7 @@ use tauri::{AppHandle, Manager, WebviewWindowBuilder};
 use url::Url;
 
 use crate::bridge::Page;
+use crate::store::{self, quoted};
 use crate::{site, WINDOW};
 
 #[cfg(feature = "steam")]
@@ -71,6 +76,10 @@ impl Steam {
     }
 
     pub fn show_store(&self, _app_id: u32) {
+        match *self {}
+    }
+
+    pub fn country(&self) -> String {
         match *self {}
     }
 }
@@ -132,17 +141,12 @@ fn hex(bytes: &[u8]) -> String {
 
 /// The store to name in the user agent (chrome.rs): Steam, when Steam
 /// started the app and so can answer a sign-in or sell the Supporter Pack,
-/// and none otherwise -- the Microsoft Store's build included, which has no
-/// Steam, and the Steam build started without it, which cannot reach it.
+/// and none otherwise: the Microsoft Store's build has no Steam (and names
+/// its own store, microsoft.rs), and the Steam build started without it
+/// cannot reach it.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn store(steam: &Option<Arc<Steam>>) -> Option<&'static str> {
     steam.as_ref().map(|_| "steam")
-}
-
-/// A value as JavaScript reads it: JSON, so a string arrives quoted and
-/// escaped, and cannot close its own quotes to run as script.
-fn quoted(value: &impl serde::Serialize) -> String {
-    serde_json::to_string(value).expect("a value serialises")
 }
 
 /// Answers the page's Steam sign-in with a ticket, or with `{}` when Steam
@@ -158,17 +162,6 @@ fn sign_in_script(ticket: Option<&str>) -> String {
     format!(
         "window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.answer({});",
         quoted(&told)
-    )
-}
-
-/// Hands the page a ticket as proof of a DLC bought. The page posts it to
-/// the site, which asks Steam what the account owns; it signs nobody in, and
-/// reloads only when the site took something, so it can come mid-drawing
-/// with the same care as any purchase.
-fn purchased_script(ticket: &str) -> String {
-    format!(
-        "window.oeeeApp && window.oeeeApp.store && window.oeeeApp.store.purchased({});",
-        quoted(&[ticket])
     )
 }
 
@@ -207,7 +200,7 @@ pub fn watch_dlc(app: &AppHandle, steam: &Option<Arc<Steam>>) {
         std::thread::spawn(move || match steam.web_api_ticket() {
             Ok(ticket) => {
                 if let Some(window) = app.get_webview_window(WINDOW) {
-                    let _ = window.eval(purchased_script(&ticket));
+                    let _ = window.eval(store::purchased_script(&[&ticket]));
                 }
             }
             // The site rechecks daily, so the badge still comes, only later.
@@ -239,6 +232,119 @@ pub fn open_store(steam: &Steam, product: &str) {
         Ok(app_id) => steam.show_store(app_id),
         Err(_) => eprintln!("not a Steam app id to sell: {product:?}"),
     }
+}
+
+/// Steam's public store API: what an app costs, and without a key, so the
+/// app can ask it and the site need not be asked on its behalf.
+const APPDETAILS: &str = "https://store.steampowered.com/api/appdetails";
+
+/// How long Steam's store gets to say what things cost. The page shows its
+/// button without a price until then, so there is no hurry beyond not
+/// leaving a thread waiting for ever.
+const PRICES_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// The address to ask the prices of several apps at once -- which Steam
+/// allows only when all that is asked for is `price_overview` -- in a
+/// country's currency, or in Steam's default when it could not say where
+/// the player is.
+fn appdetails_url(app_ids: &[u32], country: &str) -> String {
+    let ids: Vec<String> = app_ids.iter().map(u32::to_string).collect();
+    let mut url = format!("{APPDETAILS}?appids={}&filters=price_overview", ids.join(","));
+    if country.len() == 2 && country.chars().all(|c| c.is_ascii_alphabetic()) {
+        url.push_str("&cc=");
+        url.push_str(country);
+    }
+    url
+}
+
+/// Each app's price as Steam formats it for the player -- "₩5,500", "$4.99"
+/// -- from what `appdetails` answers. An app Steam did not find, or has no
+/// price for (it answers `"data": []` then), is left out.
+fn prices_from(body: &str) -> Result<BTreeMap<u32, String>, String> {
+    let answer: BTreeMap<String, serde_json::Value> =
+        serde_json::from_str(body).map_err(|error| format!("not an appdetails answer: {error}"))?;
+    Ok(answer
+        .into_iter()
+        .filter_map(|(id, details)| {
+            let id = id.parse::<u32>().ok()?;
+            let price = details
+                .pointer("/data/price_overview/final_formatted")?
+                .as_str()?
+                .trim();
+            (!price.is_empty()).then(|| (id, price.to_string()))
+        })
+        .collect())
+}
+
+#[cfg(feature = "steam")]
+fn fetch(url: &str) -> Result<String, String> {
+    let config = ureq::Agent::config_builder().timeout_global(Some(PRICES_TIMEOUT));
+    // Windows' own TLS, trusting what Windows trusts (Cargo.toml).
+    #[cfg(windows)]
+    let config = config.tls_config(
+        ureq::tls::TlsConfig::builder()
+            .provider(ureq::tls::TlsProvider::NativeTls)
+            .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+            .build(),
+    );
+    let agent: ureq::Agent = config.build().into();
+    agent
+        .get(url)
+        .header("Accept", "application/json")
+        .call()
+        .map_err(|error| error.to_string())?
+        .body_mut()
+        .read_to_string()
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(not(feature = "steam"))]
+fn fetch(_url: &str) -> Result<String, String> {
+    Err("built without Steam".to_string())
+}
+
+/// Answers the page's `prices` with what Steam's store says each DLC costs
+/// where the player is. Off the main thread, and in one request for all of
+/// them. The page names each DLC by its app id; anything else is left
+/// without a price, as is everything when Steam's store cannot be reached,
+/// and the page shows its button without one.
+pub fn answer_prices(app: &AppHandle, steam: &Steam, products: Vec<String>) {
+    let asked: Vec<(String, u32)> = products
+        .into_iter()
+        .filter_map(|product| match product.parse::<u32>() {
+            Ok(app_id) => Some((product, app_id)),
+            Err(_) => {
+                eprintln!("not a Steam app id to price: {product:?}");
+                None
+            }
+        })
+        .collect();
+    if asked.is_empty() {
+        return;
+    }
+    let country = steam.country();
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let app_ids: Vec<u32> = asked.iter().map(|(_, app_id)| *app_id).collect();
+        let found = match fetch(&appdetails_url(&app_ids, &country)).and_then(|body| prices_from(&body)) {
+            Ok(found) => found,
+            Err(error) => {
+                eprintln!("no prices from Steam: {error}");
+                return;
+            }
+        };
+        let prices: BTreeMap<String, String> = asked
+            .into_iter()
+            .filter_map(|(product, app_id)| Some((product, found.get(&app_id)?.clone())))
+            .collect();
+        if prices.is_empty() {
+            eprintln!("Steam has no price for {app_ids:?} in {country:?}");
+            return;
+        }
+        if let Some(window) = app.get_webview_window(WINDOW) {
+            let _ = window.eval(store::prices_script(&prices));
+        }
+    });
 }
 
 #[cfg(test)]
@@ -344,19 +450,46 @@ mod tests {
     }
 
     #[test]
+    fn prices_are_asked_for_all_at_once_in_the_players_country() {
+        assert_eq!(
+            appdetails_url(&[3456780, 3456790], "KR"),
+            "https://store.steampowered.com/api/appdetails?appids=3456780,3456790&filters=price_overview&cc=KR"
+        );
+        // Steam could not say where the player is, or said something odd.
+        for country in ["", "K", "K&", "KOR"] {
+            assert!(appdetails_url(&[3456780], country).ends_with("filters=price_overview"));
+        }
+    }
+
+    #[test]
+    fn a_price_is_steams_own_formatting() {
+        // As Steam answers, trimmed: one app with a price, one Steam has no
+        // price for (free, or not on sale in that country), one it does not
+        // know.
+        let body = r#"{
+            "3456780": {"success": true, "data": {"price_overview": {
+                "currency": "KRW", "initial": 550000, "final": 550000,
+                "discount_percent": 0, "initial_formatted": "",
+                "final_formatted": "₩ 5,500"
+            }}},
+            "3456790": {"success": true, "data": []},
+            "1": {"success": false}
+        }"#;
+        assert_eq!(
+            prices_from(body),
+            Ok(BTreeMap::from([(3456780, "₩ 5,500".to_string())]))
+        );
+        // What Steam answers a request it cannot read, and an error page.
+        assert!(prices_from("null").is_err());
+        assert!(prices_from("<html>").is_err());
+    }
+
+    #[test]
     fn a_ticket_answers_the_sign_in_quoted_as_javascript() {
         assert_eq!(
             sign_in_script(Some("14\"00ab")),
             r#"window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.answer({"ticket":"14\"00ab"});"#
         );
         assert!(sign_in_script(None).ends_with(".answer({});"));
-    }
-
-    #[test]
-    fn a_ticket_is_proof_of_a_purchase() {
-        assert_eq!(
-            purchased_script("1400abff"),
-            r#"window.oeeeApp && window.oeeeApp.store && window.oeeeApp.store.purchased(["1400abff"]);"#
-        );
     }
 }

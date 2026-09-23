@@ -13,7 +13,8 @@
 //! `main` only puts them together: where links go (navigation.rs), the
 //! window's frame (chrome.rs), what the site tells the app (bridge.rs),
 //! Steam (steam.rs), losing a drawing (close_guard.rs), the site going away
-//! (offline.rs), and on Windows the keys (keys.rs), the browser's parts the
+//! (offline.rs), the store the build sells through (store.rs; steam.rs and
+//! microsoft.rs), and on Windows the keys (keys.rs), the browser's parts the
 //! app answers for (webview2.rs) and Snap Layouts (snap.rs).
 
 use std::sync::Arc;
@@ -33,6 +34,7 @@ mod downloads;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod handoff;
 mod keys;
+mod microsoft;
 mod navigation;
 // What a page that failed is sent back to is WebView2's to report (webview2.rs).
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -41,6 +43,7 @@ mod site;
 #[cfg(windows)]
 mod snap;
 mod steam;
+mod store;
 #[cfg(windows)]
 mod webview2;
 mod words;
@@ -62,11 +65,12 @@ fn site_capability(site: &Url) -> tauri::ipc::CapabilityBuilder {
         .permission("core:window:allow-toggle-maximize")
         .permission("core:window:allow-is-maximized")
         .permission("core:window:allow-close")
-        // The bridge (bridge.js) and where the toolbar's maximise button is
-        // (snap.rs). Tauri 2's `emit` takes no scope, so this cannot be held
-        // to those two event names: a page of the site may emit any event.
-        // Nothing listens for any other, and only the site's own pages get
-        // this at all.
+        // The bridge (bridge.js), where the toolbar's maximise button is
+        // (snap.rs), and the page's answer to the Microsoft Store build's
+        // request for a ticket (microsoft.rs). Tauri 2's `emit` takes no
+        // scope, so this cannot be held to those event names: a page of the
+        // site may emit any event. Nothing listens for any other, and only
+        // the site's own pages get this at all.
         .permission("core:event:allow-emit")
 }
 
@@ -81,12 +85,14 @@ fn loader(site: &Url) -> String {
 /// Acts on what the site says (bridge.rs): the unread count on the icon,
 /// what the player is doing for their Steam friends, the ground behind the
 /// page, the words for the app's own dialogs, a sign-in to open in the
-/// browser, and Steam's sign-in and store.
+/// browser, Steam's sign-in, and the store -- Steam's or the Microsoft
+/// Store's, whichever the build sells through.
 fn listen_to_the_site(
     app: &App,
     window: &WebviewWindow,
     site: &Url,
     steam: Option<Arc<steam::Steam>>,
+    microsoft: Option<Arc<microsoft::Microsoft>>,
 ) {
     let (window, site) = (window.clone(), site.clone());
     app.listen_any(bridge::EVENT, move |event| match bridge::parse(event.payload()) {
@@ -116,9 +122,21 @@ fn listen_to_the_site(
                 steam::answer_sign_in(window.app_handle(), steam.clone());
             }
         }
+        // Likewise only a page whose user agent named a store asks what
+        // anything costs or to buy it, and a build sells through one store
+        // at most.
+        Some(bridge::Message::Prices { products }) => {
+            if let Some(steam) = &steam {
+                steam::answer_prices(window.app_handle(), steam, products);
+            } else if let Some(microsoft) = &microsoft {
+                microsoft.answer_prices(products);
+            }
+        }
         Some(bridge::Message::Purchase { product }) => {
             if let Some(steam) = &steam {
                 steam::open_store(steam, &product);
+            } else if let Some(microsoft) = &microsoft {
+                microsoft.sell(product);
             }
         }
         Some(bridge::Message::SignIn { .. } | bridge::Message::Other) | None => {}
@@ -142,14 +160,18 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
     let builder = steam::prepare(builder, steam, site);
     let window = navigation::prepare(builder, app.handle(), site).build()?;
 
-    listen_to_the_site(app, &window, site, steam.clone());
+    // The Microsoft Store's build sells through the Store when it is the
+    // Store's package; everywhere else there is none.
+    let microsoft = microsoft::start(&window);
+    listen_to_the_site(app, &window, site, steam.clone(), microsoft.clone());
     handoff::listen_for_return(app.handle());
     steam::watch_dlc(app.handle(), steam);
     chrome::paint_background(&window);
 
     #[cfg(windows)]
     {
-        webview2::attach(&window, steam::store(steam))?;
+        let store = steam::store(steam).or(microsoft::store(&microsoft));
+        webview2::attach(&window, store)?;
         keys::attach(&window)?;
         offline::attach(&window, site, &loader)?;
         snap::attach(&window)?;

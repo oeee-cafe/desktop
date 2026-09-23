@@ -77,9 +77,16 @@ the page reloads only when something was recorded. The crate does not wrap
 that callback, so `steamworks` is built with `raw-bindings` for
 `src/steam/client.rs` to register it.
 
-The page also asks for `prices`, and the app does not answer: the button
-shows without a price, which the page allows, until the app asks Steam for
-one.
+Before that, `/supporter` asks for `prices`. Steamworks has no way to say
+what a DLC costs, so the app asks Steam's public store API
+(`store.steampowered.com/api/appdetails?appids=...&filters=price_overview`)
+in the player's country, which Steamworks does know (`GetIPCountry`), and
+answers `oeeeApp.store.prices` with Steam's own `final_formatted` for each
+DLC -- "₩ 5,500" in Korea. It asks off the main thread, in one request for
+every DLC, over Windows' own TLS on Windows and rustls elsewhere (`ureq`,
+built only with the `steam` feature). A DLC Steam has no price for, or
+Steam's store not answering, leaves the button without a price, which the
+page allows; the failure is logged.
 
 Without Steam, the app starts as before and the button never shows. Steam's
 library still has to be beside the binary: the app links it and will not
@@ -93,8 +100,49 @@ To have Steam start a development build, put the app id in a
 
 Everything Steam is behind the `steam` feature, on by default. A build
 without it (`--no-default-features`, as for the Microsoft Store) neither
-links nor needs Steam's library, and marks no page at all: it sells nothing
-yet, so the site offers nothing to buy or to sign in with Steam there.
+links nor needs Steam's library, never names Steam, and sells through the
+Microsoft Store instead (below).
+
+## The Supporter Pack in the Microsoft Store
+
+In the Store's build the Supporter Pack is a durable add-on, sold through
+`Windows.Services.Store` (`src/microsoft.rs`). Running as the Store's
+package, the app ends its user agent with `OeeeCafe/windows
+store/microsoft`, and the site marks every page `data-store="microsoft"`;
+run unpackaged -- `cargo run --no-default-features` -- it names no store,
+since the Store answers nothing to an app it cannot identify, and the page
+offers nothing to buy.
+
+The page names each add-on by its Store ID. `prices` is answered with each
+one's price as the Store formats it (`GetStoreProductsAsync`), and
+`purchase` shows the Store's own purchase dialog over the window
+(`RequestPurchaseAsync`; a desktop app has to give the Store its window
+with `IInitializeWithWindow` first). Closing the dialog buys nothing and
+nothing is said. Once the player owns the add-on -- just bought, or already
+-- the app proves it to the site the way the Store asks a service to:
+
+1. it asks the page for `oeeeApp.store.ticket()`, which asks the site and
+   resolves to `{ticket, user}`: an Azure AD access token for the Store's
+   collections service, and the site's own id for the player;
+2. it hands those to the Store (`GetCustomerPurchaseIdAsync`), which
+   answers with a Microsoft Store ID key for that customer;
+3. it hands the key to the page with `oeeeApp.store.purchased([key])`,
+   and the site asks the collections service what the customer owns.
+
+Tauri's `eval` brings nothing back out of the page, so for step 1 the app
+evaluates a script that awaits `ticket()` itself and emits the answer as
+the app's own `oeee-store-ticket` event, with the number the app asked
+with. The site's pages can already emit events, for the bridge
+(`core:event:allow-emit`), so this needs no new permission, and no new
+message in the site's bridge contract: only `ticket()`. A page without it,
+or one that answers null, leaves the purchase unproven until the site's own
+recheck, and the app logs it.
+
+For any of this to work, Partner Center needs the add-ons (durable, their
+Store IDs given to the site's `/supporter`), and the site needs an Azure
+AD application associated with the app in Partner Center (Product
+management > Product identity, "Associate Azure AD application"), whose
+tokens for the collections service are what `ticket()` hands out.
 
 ## Rich presence
 
@@ -240,6 +288,11 @@ changing it.
 - **Leaving the real painter.** On Windows, leaving and closing were tried on
   a page with the painter's `beforeunload` handler, not in the painter
   itself, signed in.
+- **Selling.** Steam's prices, the Store's prices, purchase dialog and
+  key have been type-checked and unit-tested from macOS, not run: there is
+  no Steam client or Windows here. Worth trying: the price in two
+  countries, buying in the overlay, and in a sideloaded Store package the
+  dialog's owner window, cancelling it, and buying an add-on already owned.
 - **The MSIX.** The x64 package has been packed, registered unsigned and
   run from Start. Not yet: the ARM64 package (it needs Visual Studio's ARM64
   build tools), a signed install, a Store submission, and a look at the
