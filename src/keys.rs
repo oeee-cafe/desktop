@@ -70,7 +70,7 @@ pub fn action(key: u32, held: Modifiers) -> Option<Action> {
             (_, Some('2')) => Some(Action::Command("following")),
             (_, Some('3')) => Some(Action::Command("communities")),
             (_, Some('4')) => Some(Action::Command("together")),
-            (_, Some('5')) => Some(Action::Command("hashtags")),
+            (_, Some('5')) => Some(Action::Command("tags")),
             _ => None,
         },
         // Ctrl+Shift+R, the hard reload a player's hands may know.
