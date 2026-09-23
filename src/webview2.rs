@@ -75,9 +75,15 @@ pub fn attach(window: &tauri::WebviewWindow, store: Option<&'static str>) -> tau
 /// Tauri's `user_agent` would replace the whole string, and with it the
 /// browser and version the site and its libraries read; there is no asking
 /// it for the default to add to. WebView2 hands its current one over, and
-/// takes the new one from the next navigation on -- the window is on the
-/// bundled loader until it has reached the site, so the site's first page is
-/// already asked for with the name.
+/// the new one is set before the loader's own navigation can go anywhere:
+/// wry has asked for the loader by the time the window is built, but a
+/// navigation waits for the app's NavigationStarting handler (Tauri always
+/// has one, navigation.rs), which runs on the main thread -- the thread this
+/// runs on, from `setup`, before it returns to the event loop. Microsoft's
+/// own example sets a user agent from that handler for the navigation it is
+/// starting. So the loader should already see the name, which it reads to
+/// draw its caption buttons (loader/index.html). That is from the order of
+/// the code and not yet seen on Windows.
 fn name_the_app(webview: &tauri::webview::PlatformWebview, store: Option<&str>) {
     unsafe {
         let Ok(core) = webview.controller().CoreWebView2() else {
