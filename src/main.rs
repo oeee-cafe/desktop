@@ -26,6 +26,8 @@ mod badge;
 mod bridge;
 mod chrome;
 mod close_guard;
+#[cfg(test)]
+mod contract;
 // The right-click menu and the keys are WebView2's to hand over (webview2.rs).
 #[cfg_attr(not(windows), allow(dead_code))]
 mod context_menu;

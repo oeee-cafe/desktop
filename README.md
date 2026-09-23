@@ -193,6 +193,20 @@ OEEE_CAFE_URL=https://oeee.test/ cargo run        # against a local server
 cargo test
 ```
 
+`cargo test` holds the app to the site's contract with every app
+(`frontend/shared/appContract.json` in oeee-cafe/web): every message the
+page sends parses, the user agent is marked as the site reads it, the
+calls around leaving are the site's word for word, and every
+`window.oeeeApp` member the app calls and every command its keys send is
+one the page has (`src/contract.rs`). The copy it reads is
+`src/testdata/appContract.json`; fetch it again after the site changes
+the contract, from a checkout beside this one or from `OEEE_CAFE_WEB`:
+
+```bash
+./scripts/sync-app-contract.sh
+OEEE_CAFE_WEB=~/src/oeee-cafe-web ./scripts/sync-app-contract.sh
+```
+
 ## Building for Steam
 
 Bundles are built on the platform they are for:

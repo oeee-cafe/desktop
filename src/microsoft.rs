@@ -121,10 +121,9 @@ fn ticket_script(id: u64) -> String {
       .invoke("plugin:event|emit", {{ event: {event}, payload: {{ id: {id}, answer: answer || null }} }})
       .catch(function () {{}});
   }};
-  var store = window.oeeeApp && window.oeeeApp.store;
-  if (!store || typeof store.ticket !== "function") return reply(null);
+  if (!(window.oeeeApp && window.oeeeApp.store && typeof window.oeeeApp.store.ticket === "function")) return reply(null);
   Promise.resolve()
-    .then(function () {{ return store.ticket(); }})
+    .then(function () {{ return window.oeeeApp.store.ticket(); }})
     .then(reply, function () {{ reply(null); }});
 }})();"#,
         event = quoted(&TICKET_EVENT),
@@ -150,8 +149,8 @@ mod tests {
     fn the_ticket_is_asked_for_and_answered_in_the_apps_own_event() {
         let script = ticket_script(7);
         assert!(script.contains(r#"event: "oeee-store-ticket", payload: { id: 7, answer: answer || null }"#));
-        assert!(script.contains("store.ticket()"));
-        assert!(script.contains(r#"typeof store.ticket !== "function") return reply(null)"#));
+        assert!(script.contains("return window.oeeeApp.store.ticket();"));
+        assert!(script.contains(r#"typeof window.oeeeApp.store.ticket === "function")) return reply(null)"#));
     }
 
     #[test]
