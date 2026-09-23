@@ -181,7 +181,7 @@ impl Microsoft {
             return Ok(());
         };
         let key = context
-            .GetCustomerPurchaseIdAsync(&HSTRING::from(ticket), &HSTRING::from(user))
+            .GetCustomerCollectionsIdAsync(&HSTRING::from(ticket), &HSTRING::from(user))
             .and_then(|asked| asked.get())
             .map_err(|e| format!("no key for the purchase: {e}"))?
             .to_string();

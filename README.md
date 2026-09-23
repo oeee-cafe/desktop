@@ -124,7 +124,7 @@ nothing is said. Once the player owns the add-on -- just bought, or already
 1. it asks the page for `oeeeApp.store.ticket()`, which asks the site and
    resolves to `{ticket, user}`: an Azure AD access token for the Store's
    collections service, and the site's own id for the player;
-2. it hands those to the Store (`GetCustomerPurchaseIdAsync`), which
+2. it hands those to the Store (`GetCustomerCollectionsIdAsync`), which
    answers with a Microsoft Store ID key for that customer;
 3. it hands the key to the page with `oeeeApp.store.purchased([key])`,
    and the site asks the collections service what the customer owns.

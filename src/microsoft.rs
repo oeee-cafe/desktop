@@ -21,8 +21,10 @@
 //!      site and resolves to `{ticket, user}` -- an Azure AD access token for
 //!      the Store's collections service, and the site's own id for the
 //!      player -- or to null when it cannot give one;
-//!   2. the app hands those to the Store (`GetCustomerPurchaseIdAsync`),
-//!      which answers with a key;
+//!   2. the app hands those to the Store (`GetCustomerCollectionsIdAsync`),
+//!      which answers with a Microsoft Store ID key for querying what the
+//!      customer owns -- the collections key, not the purchase key, which is
+//!      for the Store's purchase API that nothing here uses;
 //!   3. the app hands the key to the page with `oeeeApp.store.purchased`,
 //!      and the site asks the Store's collections service what that
 //!      customer owns.
