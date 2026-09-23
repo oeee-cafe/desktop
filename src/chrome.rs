@@ -6,10 +6,11 @@
 //! toolbar's right end instead (caption.js). On Linux the system's title bar
 //! stays, over the toolbar.
 //!
-//! The site lays itself out for this on its own. The app names itself in the
-//! user agent (`USER_AGENT_MARK`), from which the site marks its root
-//! `data-desktop="windows"` and keeps room at the toolbar's end for the
-//! buttons (theme_head.jinja and ds.css in oeee-cafe/web); and the toolbar
+//! The site lays itself out for this on its own. The app names itself at the
+//! end of the user agent (`user_agent`), from which the site marks its root
+//! `data-app="windows"` and `data-form="desktop"` before the page paints, and
+//! keeps room at the toolbar's end for the buttons (theme_head.jinja and
+//! ds.css in oeee-cafe/web); and the toolbar
 //! arrives marked `data-tauri-drag-region="deep"` (toolbar.jinja), so Tauri
 //! drags the window by it without the app going looking for it. The loader
 //! marks its own strip the same way (`loader/index.html`).
@@ -20,16 +21,27 @@ use tauri::window::Color;
 use tauri::{Theme, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 
 /// What the app adds to the webview's user agent, which is how the site
-/// tells this window from a browser and from the other apps.
-pub const USER_AGENT_MARK: &str = "OeeeCafeWindows";
+/// tells this window from a browser and from the other apps. Every app ends
+/// its user agent with a token of this one shape, `OeeeCafe/<app>`, so the
+/// site has one place to read which app it is in.
+pub const USER_AGENT_MARK: &str = "OeeeCafe/windows";
 
-/// The webview's own user agent with the app's name at its end, once.
+/// The webview's own user agent with the app's name at its end, and after it
+/// the store this build sells through, if it sells at all: ` store/steam`
+/// when Steam started it, and nothing otherwise, so the site offers nothing
+/// to buy in a window that could not sell it. The site marks the root
+/// `data-store` from that, before the page paints.
+///
+/// Added once: a user agent that already names an app is left as it is.
 #[cfg_attr(not(windows), allow(dead_code))]
-pub fn user_agent(default: &str) -> String {
-    if default.split(' ').any(|part| part == USER_AGENT_MARK) {
+pub fn user_agent(default: &str, store: Option<&str>) -> String {
+    if default.split(' ').any(|part| part.starts_with("OeeeCafe/")) {
         return default.to_owned();
     }
-    format!("{default} {USER_AGENT_MARK}")
+    match store {
+        Some(store) => format!("{default} {USER_AGENT_MARK} store/{store}"),
+        None => format!("{default} {USER_AGENT_MARK}"),
+    }
 }
 
 /// Minimise, maximise or restore, and close, drawn into the toolbar on
@@ -139,9 +151,17 @@ mod tests {
     #[test]
     fn the_app_names_itself_once_after_the_webviews_own() {
         let edge = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0";
-        let named = user_agent(edge);
-        assert_eq!(named, format!("{edge} OeeeCafeWindows"));
-        assert_eq!(user_agent(&named), named);
+        let named = user_agent(edge, None);
+        assert_eq!(named, format!("{edge} OeeeCafe/windows"));
+        assert_eq!(user_agent(&named, None), named);
+    }
+
+    #[test]
+    fn a_build_that_sells_names_its_store_after_the_app() {
+        let edge = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0";
+        let named = user_agent(edge, Some("steam"));
+        assert_eq!(named, format!("{edge} OeeeCafe/windows store/steam"));
+        assert_eq!(user_agent(&named, Some("steam")), named);
     }
 
     #[test]
@@ -151,7 +171,7 @@ mod tests {
         // the toolbar by its class to do either.
         assert!(!WINDOWS_CAPTION.contains("#menubar"));
         assert!(!WINDOWS_CAPTION.contains(".toolbar-links"));
-        assert!(!WINDOWS_CAPTION.contains(r#"setAttribute("data-desktop""#));
+        assert!(!WINDOWS_CAPTION.contains(r#"setAttribute("data-app""#));
         assert!(!WINDOWS_CAPTION.contains("data-tauri-drag-region"));
     }
 

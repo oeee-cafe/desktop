@@ -57,19 +57,20 @@ unsafe fn take_string(get: impl FnOnce(*mut PWSTR) -> windows::core::Result<()>)
 /// Quiets the browser, and hands the app the page's dialogs and the
 /// right-click menu. The keys (keys.rs) and the pages that fail (offline.rs)
 /// are attached by their own features.
-pub fn attach(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+pub fn attach(window: &tauri::WebviewWindow, store: Option<&'static str>) -> tauri::Result<()> {
     use tauri::Manager;
     let app = window.app_handle().clone();
     window.with_webview(move |webview| {
-        name_the_app(&webview);
+        name_the_app(&webview, store);
         quiet_the_browser(&webview);
         on_script_dialogs(&webview, app);
         on_context_menu(&webview);
     })
 }
 
-/// Adds the app's name to the end of WebView2's own user agent (chrome.rs),
-/// which is how the site knows it is in this window.
+/// Adds the app's name, and the store it sells through if any, to the end of
+/// WebView2's own user agent (chrome.rs), which is how the site knows it is
+/// in this window and whether to offer anything for sale in it.
 ///
 /// Tauri's `user_agent` would replace the whole string, and with it the
 /// browser and version the site and its libraries read; there is no asking
@@ -77,7 +78,7 @@ pub fn attach(window: &tauri::WebviewWindow) -> tauri::Result<()> {
 /// takes the new one from the next navigation on -- the window is on the
 /// bundled loader until it has reached the site, so the site's first page is
 /// already asked for with the name.
-fn name_the_app(webview: &tauri::webview::PlatformWebview) {
+fn name_the_app(webview: &tauri::webview::PlatformWebview, store: Option<&str>) {
     unsafe {
         let Ok(core) = webview.controller().CoreWebView2() else {
             return;
@@ -88,7 +89,7 @@ fn name_the_app(webview: &tauri::webview::PlatformWebview) {
         let Ok(default) = take_string(|value| settings.UserAgent(value)) else {
             return;
         };
-        let named = crate::chrome::user_agent(&default);
+        let named = crate::chrome::user_agent(&default, store);
         if named != default {
             let _ = settings.SetUserAgent(&HSTRING::from(named));
         }

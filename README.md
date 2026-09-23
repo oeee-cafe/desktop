@@ -47,8 +47,10 @@ There is no macOS build: on the Mac, Oeee Cafe is the
 
 ## Signing in with Steam
 
-Started by Steam, the app marks every page `data-store="steam"`, before it
-paints, and the site's sign-in page shows "Sign in with Steam" (the account
+Started by Steam, the app ends its user agent with
+`OeeeCafe/windows store/steam` rather than `OeeeCafe/windows` alone, and
+the site marks every page `data-store="steam"` from that before it paints.
+Only then does its sign-in page show "Sign in with Steam" (the account
 page, "Link your Steam account"). The page takes that press itself: it sends
 the app `signIn` with the provider `steam` on the bridge, the app asks Steam
 for a Web API ticket (`GetAuthTicketForWebApi`, with the identity

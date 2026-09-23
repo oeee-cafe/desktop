@@ -24,8 +24,8 @@
   var style = document.createElement("style");
   // Only the buttons' own look. The room the toolbar keeps for them at its
   // end is the site's (ds.css in oeee-cafe/web), keyed on the root's
-  // data-desktop="windows", which the site sets from the user agent
-  // (theme_head.jinja; chrome.rs names the app there).
+  // data-app="windows", which the site sets from the user agent before the
+  // page paints (theme_head.jinja; chrome.rs names the app there).
   style.textContent = [
     ".oeee-caption { position: absolute; top: 0; right: 0; z-index: 60; display: flex; height: 52px; }",
     ".oeee-caption.is-loose { position: fixed; }",

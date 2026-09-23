@@ -26,8 +26,12 @@
 //!
 //! Without Steam -- started from a terminal, or Steam not running, or the
 //! Microsoft Store's build, which has none -- the app is the same window
-//! onto the site it always was, and the page never asks: the site shows
-//! Steam's buttons only on a page the app has marked `data-store="steam"`.
+//! onto the site it always was, and the page never asks. The site shows
+//! Steam's buttons only in a window whose user agent ends ` store/steam`,
+//! which the app adds only when Steam is there to answer them (`store`,
+//! and `user_agent` in chrome.rs); the site marks the root
+//! `data-store="steam"` from it, before the page paints, so neither button
+//! is drawn in a window that could do nothing with it.
 
 // Without the `steam` feature, what reads pages and writes scripts for Steam
 // is still built and tested, and nothing calls it.
@@ -126,10 +130,14 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Runs at the start of every page: tells the site this build sells through
-/// Steam, which is what shows Steam's buttons and lets the page ask for a
-/// ticket (mark_page.js).
-pub const MARK_PAGE: &str = include_str!("steam/mark_page.js");
+/// The store to name in the user agent (chrome.rs): Steam, when Steam
+/// started the app and so can answer a sign-in or sell the Supporter Pack,
+/// and none otherwise -- the Microsoft Store's build included, which has no
+/// Steam, and the Steam build started without it, which cannot reach it.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn store(steam: &Option<Arc<Steam>>) -> Option<&'static str> {
+    steam.as_ref().map(|_| "steam")
+}
 
 /// A value as JavaScript reads it: JSON, so a string arrives quoted and
 /// escaped, and cannot close its own quotes to run as script.
@@ -164,9 +172,9 @@ fn purchased_script(ticket: &str) -> String {
     )
 }
 
-/// Marks each page for Steam, and says the player is browsing whenever the
-/// window shows a page that is not the site's -- the loader, or its "can't be
-/// reached" page -- which sends no `page` message to say otherwise.
+/// Says the player is browsing whenever the window shows a page that is not
+/// the site's -- the loader, or its "can't be reached" page -- which sends no
+/// `page` message to say otherwise.
 pub fn prepare<'a, M: Manager<tauri::Wry>>(
     builder: WebviewWindowBuilder<'a, tauri::Wry, M>,
     steam: &Option<Arc<Steam>>,
@@ -176,9 +184,7 @@ pub fn prepare<'a, M: Manager<tauri::Wry>>(
         return builder;
     };
     let site = site.clone();
-    builder
-        .initialization_script(MARK_PAGE)
-        .on_page_load(move |_window, payload| {
+    builder.on_page_load(move |_window, payload| {
             if payload.event() == PageLoadEvent::Finished && !site::is_site(payload.url(), &site) {
                 steam.show_presence(None);
             }
@@ -352,10 +358,5 @@ mod tests {
             purchased_script("1400abff"),
             r#"window.oeeeApp && window.oeeeApp.store && window.oeeeApp.store.purchased(["1400abff"]);"#
         );
-    }
-
-    #[test]
-    fn the_page_is_marked_as_selling_through_steam() {
-        assert!(MARK_PAGE.contains(r#"setAttribute("data-store", "steam")"#));
     }
 }

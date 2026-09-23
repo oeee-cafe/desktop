@@ -107,9 +107,10 @@ fn listen_to_the_site(
         }
         Some(bridge::Message::Words(said)) => words::heard(said),
         Some(bridge::Message::Browse { url }) => handoff::browse(window.app_handle(), &site, &url),
-        // Only a page the Steam build marked asks for either, so a window
-        // without Steam -- the Microsoft Store's build among them -- is never
-        // waited on, and has nothing to answer with.
+        // Only a page whose user agent named Steam as the store asks for
+        // either (steam::store), so a window without Steam -- the Microsoft
+        // Store's build among them -- is never waited on, and has nothing to
+        // answer with.
         Some(bridge::Message::SignIn { provider }) if provider == "steam" => {
             if let Some(steam) = &steam {
                 steam::answer_sign_in(window.app_handle(), steam.clone());
@@ -148,7 +149,7 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
 
     #[cfg(windows)]
     {
-        webview2::attach(&window)?;
+        webview2::attach(&window, steam::store(steam))?;
         keys::attach(&window)?;
         offline::attach(&window, site, &loader)?;
         snap::attach(&window)?;
