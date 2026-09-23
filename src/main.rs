@@ -34,6 +34,8 @@ mod downloads;
 mod handoff;
 mod keys;
 mod navigation;
+// What a page that failed is sent back to is WebView2's to report (webview2.rs).
+#[cfg_attr(not(windows), allow(dead_code))]
 mod offline;
 mod site;
 #[cfg(windows)]
@@ -76,10 +78,17 @@ fn loader(site: &Url) -> String {
     )
 }
 
-/// Acts on what the site says (bridge.rs): the unread count on the icon, and
-/// what the player is doing for their Steam friends.
-fn listen_to_the_site(app: &App, window: &WebviewWindow, steam: Option<Arc<steam::Steam>>) {
-    let window = window.clone();
+/// Acts on what the site says (bridge.rs): the unread count on the icon,
+/// what the player is doing for their Steam friends, the ground behind the
+/// page, the words for the app's own dialogs, and a sign-in to open in the
+/// browser.
+fn listen_to_the_site(
+    app: &App,
+    window: &WebviewWindow,
+    site: &Url,
+    steam: Option<Arc<steam::Steam>>,
+) {
+    let (window, site) = (window.clone(), site.clone());
     app.listen_any(bridge::EVENT, move |event| match bridge::parse(event.payload()) {
         Some(bridge::Message::Page(page)) => {
             // Nobody signed in has no bell, and so no count to send.
@@ -91,6 +100,13 @@ fn listen_to_the_site(app: &App, window: &WebviewWindow, steam: Option<Arc<steam
             }
         }
         Some(bridge::Message::Unread { count }) => badge::show(&window, count),
+        Some(bridge::Message::Theme(theme)) => {
+            if let Some(ground) = theme.ground {
+                chrome::paint_ground(&window, &ground);
+            }
+        }
+        Some(bridge::Message::Words(said)) => words::heard(said),
+        Some(bridge::Message::Browse { url }) => handoff::browse(window.app_handle(), &site, &url),
         Some(bridge::Message::Other) | None => {}
     });
 }
@@ -108,15 +124,11 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
         // Saved where the player says, and never a replay file
         // (downloads.rs).
         .on_download(|webview, event| downloads::handle(&webview, event));
-    let builder = chrome::prepare(builder)
-        .initialization_script(bridge::SCRIPT)
-        .initialization_script(handoff::SCRIPT)
-        .initialization_script(offline::page_script());
+    let builder = chrome::prepare(builder).initialization_script(bridge::SCRIPT);
     let builder = steam::prepare(builder, steam, site);
     let window = navigation::prepare(builder, app.handle(), site, steam).build()?;
 
-    listen_to_the_site(app, &window, steam.clone());
-    handoff::listen(app.handle(), site);
+    listen_to_the_site(app, &window, site, steam.clone());
     handoff::listen_for_return(app.handle());
     steam::watch_dlc(app.handle(), steam, site);
     chrome::paint_background(&window);

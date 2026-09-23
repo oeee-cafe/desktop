@@ -1,72 +1,83 @@
-//! The few sentences the app says itself, in the languages the site speaks.
+//! The few sentences the app says itself.
 //!
-//! Dialogs are the app's, not the page's, so they follow the system language
-//! as every other native dialog on the machine does.
+//! What it says over a page -- the question before leaving a drawing, Copy
+//! link in the right-click menu, Steam failing to sign in -- is in the page's
+//! language, not the system's: the site sends it in a `words` message
+//! (bridge.rs; the app-* messages in locales/*.ftl in oeee-cafe/web) once a
+//! page, so a reader who chose Korean on the site is asked in Korean on an
+//! English Windows, as the page around the dialog already speaks to them.
+//! It used to follow the system language, from copies of the site's words
+//! kept here in each of its languages, which a reader's choice on the site
+//! never reached and a change of wording on the site never updated. English
+//! stays for before the first page has said anything.
+//!
+//! The app's name, the title over the page's own `alert()` and `confirm()`,
+//! is the app's to say in any language, and follows the system's, as every
+//! other program's title does.
 
+use std::sync::RwLock;
+
+use serde::Deserialize;
+
+/// What the app says over a page, as the site words it. Any the site leaves
+/// out are the English ones.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
 pub struct Words {
-    /// The title over the page's own `alert()` and `confirm()`.
-    pub app_name: &'static str,
-    pub leave_title: &'static str,
-    pub leave_body: &'static str,
-    pub leave: &'static str,
-    pub stay: &'static str,
+    pub leave_title: String,
+    pub leave_body: String,
+    pub leave: String,
+    pub stay: String,
     /// Steam did not hand over a sign-in ticket.
-    pub steam_sign_in_failed: &'static str,
+    pub steam_sign_in_failed: String,
     /// The right-click menu's item for a link (webview2.rs).
     #[cfg_attr(not(windows), allow(dead_code))]
-    pub copy_link: &'static str,
+    pub copy_link: String,
 }
 
-const EN: Words = Words {
-    app_name: "Oeee Cafe",
-    leave_title: "Leave this page?",
-    leave_body: "Anything you have not saved will be lost.",
-    leave: "Leave",
-    stay: "Stay",
-    steam_sign_in_failed: "Steam could not sign you in. Make sure Steam is running and try again.",
-    copy_link: "Copy link",
-};
-
-const KO: Words = Words {
-    app_name: "오이카페",
-    leave_title: "이 페이지를 떠날까요?",
-    leave_body: "저장하지 않은 내용은 사라집니다.",
-    leave: "떠나기",
-    stay: "머무르기",
-    steam_sign_in_failed: "Steam으로 로그인하지 못했습니다. Steam이 실행 중인지 확인하고 다시 시도해 주세요.",
-    copy_link: "링크 복사",
-};
-
-const JA: Words = Words {
-    app_name: "OEEEカフェ",
-    leave_title: "このページを離れますか？",
-    leave_body: "保存していない内容は失われます。",
-    leave: "離れる",
-    stay: "とどまる",
-    steam_sign_in_failed: "Steamでログインできませんでした。Steamが起動しているか確認して、もう一度お試しください。",
-    copy_link: "リンクをコピー",
-};
-
-const ZH: Words = Words {
-    app_name: "黄瓜咖啡馆",
-    leave_title: "要离开此页面吗？",
-    leave_body: "未保存的内容将会丢失。",
-    leave: "离开",
-    stay: "留下",
-    steam_sign_in_failed: "无法通过 Steam 登录。请确认 Steam 正在运行，然后重试。",
-    copy_link: "复制链接",
-};
-
-pub fn words() -> &'static Words {
-    for_language(&sys_locale::get_locale().unwrap_or_default())
+impl Default for Words {
+    fn default() -> Self {
+        Words {
+            leave_title: "Leave this page?".into(),
+            leave_body: "Anything you have not saved will be lost.".into(),
+            leave: "Leave".into(),
+            stay: "Stay".into(),
+            steam_sign_in_failed:
+                "Steam could not sign you in. Make sure Steam is running and try again.".into(),
+            copy_link: "Copy link".into(),
+        }
+    }
 }
 
-fn for_language(locale: &str) -> &'static Words {
+/// The last words a page sent, or none before the first.
+static HEARD: RwLock<Option<Words>> = RwLock::new(None);
+
+/// Keeps the words a page sent, for every dialog and menu after.
+pub fn heard(words: Words) {
+    *HEARD.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(words);
+}
+
+/// The words to say now: the page's, or English before it has said any.
+pub fn words() -> Words {
+    HEARD
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+        .unwrap_or_default()
+}
+
+/// The title over the page's own `alert()` and `confirm()`, in the system's
+/// language.
+pub fn app_name() -> &'static str {
+    app_name_for(&sys_locale::get_locale().unwrap_or_default())
+}
+
+fn app_name_for(locale: &str) -> &'static str {
     match locale.get(..2) {
-        Some("ko") => &KO,
-        Some("ja") => &JA,
-        Some("zh") => &ZH,
-        _ => &EN,
+        Some("ko") => "오이카페",
+        Some("ja") => "OEEEカフェ",
+        Some("zh") => "黄瓜咖啡馆",
+        _ => "Oeee Cafe",
     }
 }
 
@@ -75,15 +86,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_locale_picks_its_language() {
-        assert_eq!(for_language("ko-KR").leave, KO.leave);
-        assert_eq!(for_language("ja").leave, JA.leave);
-        assert_eq!(for_language("zh-Hans-CN").leave, ZH.leave);
+    fn a_locale_picks_the_apps_name() {
+        assert_eq!(app_name_for("ko-KR"), "오이카페");
+        assert_eq!(app_name_for("ja"), "OEEEカフェ");
+        assert_eq!(app_name_for("zh-Hans-CN"), "黄瓜咖啡馆");
     }
 
     #[test]
     fn anything_else_is_english() {
-        assert_eq!(for_language("fr-FR").leave, EN.leave);
-        assert_eq!(for_language("").leave, EN.leave);
+        assert_eq!(app_name_for("fr-FR"), "Oeee Cafe");
+        assert_eq!(app_name_for(""), "Oeee Cafe");
     }
 }

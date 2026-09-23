@@ -252,6 +252,6 @@ mod tests {
 
     #[test]
     fn the_toolbar_says_where_its_button_is() {
-        assert!(crate::chrome::script("windows").contains(EVENT));
+        assert!(crate::chrome::WINDOWS_CAPTION.contains(EVENT));
     }
 }

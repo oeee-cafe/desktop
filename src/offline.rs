@@ -13,9 +13,10 @@
 //! site's own -- a 404, a 500 -- is the site speaking, and is shown.
 //!
 //! htmx fetches the site's pages itself, and on an answer like that it puts
-//! the gateway's page in the body, or on no answer does nothing at all; so a
-//! page navigation htmx cannot complete is made again as an ordinary one
-//! (`PAGE_SCRIPT`), which the window sees fail.
+//! the gateway's page in the body, or on no answer does nothing at all. The
+//! site makes such a page navigation again as an ordinary one, knowing the
+//! same statuses as `GATEWAY` (theme_head.jinja in oeee-cafe/web), and that
+//! is the one the window sees fail.
 
 use url::Url;
 
@@ -46,20 +47,6 @@ pub fn loader_for(loader: &Url, page: &Url) -> Url {
     }
     back
 }
-
-/// Runs in every page of the site: a page navigation htmx could not complete
-/// is made again as an ordinary one (offline.js), knowing the same statuses
-/// as `GATEWAY`.
-pub fn page_script() -> String {
-    let statuses = GATEWAY
-        .iter()
-        .map(u16::to_string)
-        .collect::<Vec<_>>()
-        .join(", ");
-    PAGE_SCRIPT.replace("__GATEWAY__", &format!("[{statuses}]"))
-}
-
-const PAGE_SCRIPT: &str = include_str!("offline.js");
 
 /// Sends a page of the site that could not be reached back to the loader,
 /// which says so and tries it again. `loader` is the loader's path in the
@@ -115,10 +102,5 @@ mod tests {
                 ("offline".into(), "1".into()),
             ]
         );
-    }
-
-    #[test]
-    fn the_page_script_knows_the_same_statuses() {
-        assert!(page_script().contains("var GATEWAY = [502, 503, 504, 520,"));
     }
 }

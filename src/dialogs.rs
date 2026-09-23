@@ -34,22 +34,22 @@ pub fn ask(app: &AppHandle, question: Question, answer: impl FnOnce(bool) + Send
         let dialog = match &question {
             Question::Alert(message) => dialog
                 .set_level(MessageLevel::Info)
-                .set_title(words.app_name)
+                .set_title(words::app_name())
                 .set_description(message)
                 .set_buttons(MessageButtons::Ok),
             Question::Confirm(message) => dialog
                 .set_level(MessageLevel::Info)
-                .set_title(words.app_name)
+                .set_title(words::app_name())
                 .set_description(message)
                 .set_buttons(MessageButtons::OkCancel),
             Question::Leave => dialog
                 .set_level(MessageLevel::Warning)
-                .set_title(words.leave_title)
-                .set_description(words.leave_body)
+                .set_title(&words.leave_title)
+                .set_description(&words.leave_body)
                 // Staying is the default, so a reflexive Return keeps the work.
                 .set_buttons(MessageButtons::OkCancelCustom(
-                    words.stay.into(),
-                    words.leave.into(),
+                    words.stay.clone(),
+                    words.leave.clone(),
                 )),
         };
         let dialog = match &window {
@@ -59,7 +59,7 @@ pub fn ask(app: &AppHandle, question: Question, answer: impl FnOnce(bool) + Send
         let shown = dialog.show();
         std::thread::spawn(move || {
             let result = tauri::async_runtime::block_on(shown);
-            answer(agreed(&question, &result, words.leave));
+            answer(agreed(&question, &result, &words.leave));
         });
     });
 }
@@ -83,7 +83,8 @@ mod tests {
 
     #[test]
     fn only_leave_leaves() {
-        let leave = words::words().leave;
+        let words = words::Words::default();
+        let leave = words.leave.as_str();
         assert!(agreed(
             &Question::Leave,
             &MessageDialogResult::Custom(leave.into()),
@@ -91,7 +92,7 @@ mod tests {
         ));
         assert!(!agreed(
             &Question::Leave,
-            &MessageDialogResult::Custom(words::words().stay.into()),
+            &MessageDialogResult::Custom(words.stay.clone()),
             leave
         ));
         assert!(!agreed(

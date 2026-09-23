@@ -1,5 +1,5 @@
-//! WebView2 settings Tauri leaves at the browser's defaults, the page loads
-//! that failed, which Tauri does not report (offline.rs), and the parts of
+//! WebView2 settings Tauri leaves at the browser's defaults, the app's name
+//! in the user agent, the page loads that failed, which Tauri does not report (offline.rs), and the parts of
 //! the browser the app answers for itself.
 //!
 //! Tauri already turns off the status bar, zoom and swipe navigation. It
@@ -19,7 +19,7 @@
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2ContextMenuItemCollection, ICoreWebView2Environment9,
     ICoreWebView2NavigationCompletedEventArgs2, ICoreWebView2ScriptDialogOpeningEventArgs,
-    ICoreWebView2Settings3, ICoreWebView2Settings4, ICoreWebView2_11, ICoreWebView2_2,
+    ICoreWebView2Settings2, ICoreWebView2Settings3, ICoreWebView2Settings4, ICoreWebView2_11, ICoreWebView2_2,
     COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND, COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_COMMAND,
     COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_SEPARATOR, COREWEBVIEW2_KEY_EVENT_KIND,
     COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN, COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
@@ -44,7 +44,6 @@ use crate::context_menu::{self, Item};
 use crate::dialogs::{self, Question};
 use crate::keys::{self, Modifiers};
 use crate::offline;
-use crate::words::Words;
 
 /// A string WebView2 hands over, which the caller frees.
 unsafe fn take_string(get: impl FnOnce(*mut PWSTR) -> windows::core::Result<()>) -> windows::core::Result<String> {
@@ -62,10 +61,38 @@ pub fn attach(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     use tauri::Manager;
     let app = window.app_handle().clone();
     window.with_webview(move |webview| {
+        name_the_app(&webview);
         quiet_the_browser(&webview);
         on_script_dialogs(&webview, app);
-        on_context_menu(&webview, crate::words::words());
+        on_context_menu(&webview);
     })
+}
+
+/// Adds the app's name to the end of WebView2's own user agent (chrome.rs),
+/// which is how the site knows it is in this window.
+///
+/// Tauri's `user_agent` would replace the whole string, and with it the
+/// browser and version the site and its libraries read; there is no asking
+/// it for the default to add to. WebView2 hands its current one over, and
+/// takes the new one from the next navigation on -- the window is on the
+/// bundled loader until it has reached the site, so the site's first page is
+/// already asked for with the name.
+fn name_the_app(webview: &tauri::webview::PlatformWebview) {
+    unsafe {
+        let Ok(core) = webview.controller().CoreWebView2() else {
+            return;
+        };
+        let Ok(settings) = core.Settings().and_then(|settings| settings.cast::<ICoreWebView2Settings2>()) else {
+            return;
+        };
+        let Ok(default) = take_string(|value| settings.UserAgent(value)) else {
+            return;
+        };
+        let named = crate::chrome::user_agent(&default);
+        if named != default {
+            let _ = settings.SetUserAgent(&HSTRING::from(named));
+        }
+    }
 }
 
 fn quiet_the_browser(webview: &tauri::webview::PlatformWebview) {
@@ -231,8 +258,9 @@ unsafe fn message(args: &ICoreWebView2ScriptDialogOpeningEventArgs) -> windows::
 }
 
 /// Trims WebView2's right-click menu to what a program's would have
-/// (context_menu.rs), and puts Copy link first on a link.
-fn on_context_menu(webview: &tauri::webview::PlatformWebview, words: &'static Words) {
+/// (context_menu.rs), and puts Copy link first on a link, in the words the
+/// page last sent (words.rs).
+fn on_context_menu(webview: &tauri::webview::PlatformWebview) {
     unsafe {
         let Ok(core) = webview.controller().CoreWebView2() else {
             return;
@@ -260,7 +288,7 @@ fn on_context_menu(webview: &tauri::webview::PlatformWebview, words: &'static Wo
                 let link = take_string(|value| target.LinkUri(value))?;
                 if let Some(link) = context_menu::copyable_link(&link).map(str::to_owned) {
                     let copy = environment.CreateContextMenuItem(
-                        &HSTRING::from(words.copy_link),
+                        &HSTRING::from(crate::words::words().copy_link),
                         None::<&IStream>,
                         COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_COMMAND,
                     )?;

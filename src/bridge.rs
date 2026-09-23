@@ -9,12 +9,14 @@
 //! `oeeeBridge.postMessage` with a JSON string, which bridge.js hands to the
 //! app as an `oeee-bridge` event.
 //!
-//! Every message is `{v, type, ...}`. Types the app has no use for -- the
-//! page's theme, haptics, a finger landing on a drawing, the painter being
-//! ready -- and fields it does not read are ignored, so the site can add
-//! either without a release of the app.
+//! Every message is `{v, type, ...}`. Types the app has no use for --
+//! haptics, a finger landing on a drawing, the painter being ready -- and
+//! fields it does not read are ignored, so the site can add either without a
+//! release of the app.
 
 use serde::Deserialize;
+
+use crate::words::Words;
 
 /// Defines `window.oeeeBridge` before the page's first script runs.
 pub const SCRIPT: &str = include_str!("bridge.js");
@@ -34,6 +36,14 @@ pub enum Message {
     Page(Page),
     /// The number on the bell.
     Unread { count: i64 },
+    /// The page's colours, of which the app uses the ground (chrome.rs).
+    Theme(Theme),
+    /// What the app says in its own dialogs and menus, in the page's
+    /// language (words.rs). Sent once a page.
+    Words(Words),
+    /// Open this address in the system's browser: a sign-in the page is
+    /// handing out (handoff.rs, app_sign_in.jinja).
+    Browse { url: String },
     /// Anything else the site says.
     #[serde(other)]
     Other,
@@ -54,6 +64,15 @@ pub struct Page {
     pub community: Option<String>,
     #[serde(default)]
     pub group: Option<String>,
+}
+
+/// What the site says about its colours, as far as the app uses them.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct Theme {
+    /// The design system's `--ds-ground` as a CSS colour, the field behind
+    /// every page; none on a page without the design system's stylesheet.
+    #[serde(default)]
+    pub ground: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -123,9 +142,62 @@ mod tests {
     }
 
     #[test]
+    fn the_theme_says_what_the_ground_is() {
+        let message = sent(
+            r##"{"v":1,"type":"theme","choice":"dark","dark":true,"top":"#000","bottom":"#000","ground":"#17172b","grid":"#22223f"}"##,
+        );
+        assert_eq!(
+            parse(&message),
+            Some(Message::Theme(Theme {
+                ground: Some("#17172b".into()),
+            }))
+        );
+        // A page without the design system's stylesheet has none.
+        let message = sent(r#"{"v":1,"type":"theme","choice":"system","dark":false,"ground":null}"#);
+        assert_eq!(parse(&message), Some(Message::Theme(Theme::default())));
+    }
+
+    #[test]
+    fn the_words_are_the_pages() {
+        let message = sent(
+            r#"{"v":1,"type":"words","leaveTitle":"이 페이지를 떠날까요?","leaveBody":"저장하지 않은 내용은 사라집니다.","leave":"떠나기","stay":"머무르기","ok":"확인","cancel":"취소","saveImage":"이미지 저장","copyImage":"이미지 복사","share":"공유…","copyLink":"링크 복사","savedImage":"사진에 저장했습니다","savedFile":"다운로드에 저장했습니다","saveFailed":"저장하지 못했습니다","steamSignInFailed":"Steam으로 로그인하지 못했습니다."}"#,
+        );
+        let Some(Message::Words(words)) = parse(&message) else {
+            panic!("not understood: {message}");
+        };
+        assert_eq!(words.leave_title, "이 페이지를 떠날까요?");
+        assert_eq!(words.leave, "떠나기");
+        assert_eq!(words.stay, "머무르기");
+        assert_eq!(words.copy_link, "링크 복사");
+        assert_eq!(words.steam_sign_in_failed, "Steam으로 로그인하지 못했습니다.");
+    }
+
+    #[test]
+    fn words_the_page_leaves_out_are_the_apps_own() {
+        let Some(Message::Words(words)) = parse(&sent(r#"{"v":1,"type":"words","leave":"떠나기"}"#)) else {
+            panic!("not understood");
+        };
+        assert_eq!(words.leave, "떠나기");
+        assert_eq!(words.stay, Words::default().stay);
+    }
+
+    #[test]
+    fn a_page_asks_for_the_browser() {
+        assert_eq!(
+            parse(&sent(
+                r#"{"v":1,"type":"browse","url":"https://oeee.cafe/auth/handoff/open?id=1"}"#
+            )),
+            Some(Message::Browse {
+                url: "https://oeee.cafe/auth/handoff/open?id=1".into()
+            })
+        );
+        assert_eq!(parse(&sent(r#"{"v":1,"type":"browse"}"#)), None);
+    }
+
+    #[test]
     fn what_the_app_does_not_know_is_ignored() {
         for message in [
-            r##"{"v":1,"type":"theme","choice":"dark","dark":true,"top":"#000","bottom":"#000"}"##,
+            r#"{"v":1,"type":"signIn","provider":"apple","nonce":"n"}"#,
             r#"{"v":1,"type":"haptic","name":"light"}"#,
             r#"{"v":1,"type":"something-new"}"#,
         ] {
@@ -133,41 +205,20 @@ mod tests {
         }
     }
 
-    /// What app_bridge.jinja (oeee-cafe-web) really sends, captured from its
-    /// script running in Chromium over pages shaped like the site's: a feed
-    /// signed in, a collaborative painter, a replay signed out, and a page
-    /// without the toolbar. Recapture it when the site's script changes.
-    const CAPTURED: &str = include_str!("bridge-messages.jsonl");
-
     #[test]
-    fn what_the_site_really_sends_is_understood() {
-        let parsed: Vec<Message> = CAPTURED
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|line| parse(&sent(line)).unwrap_or_else(|| panic!("not understood: {line}")))
-            .collect();
-        let unread: Vec<i64> = parsed
-            .iter()
-            .filter_map(|m| match m {
-                Message::Unread { count } => Some(*count),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(unread, [12, 0]);
-        let pages: Vec<&Page> = parsed
-            .iter()
-            .filter_map(|m| match m {
-                Message::Page(page) => Some(page),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(
-            pages.iter().map(|p| p.signed_in).collect::<Vec<_>>(),
-            [Some(true), Some(true), Some(false), None]
+    fn a_community_name_keeps_its_quotes() {
+        let message = sent(
+            r#"{"v":1,"type":"page","path":"/replay","signedIn":false,"presence":"watching-replay","community":"오이카페 \"모에화\"","group":null,"painting":false,"refreshable":false}"#,
         );
-        assert_eq!(pages[1].presence.as_deref(), Some("collaborating"));
-        assert_eq!(pages[1].group.as_deref(), Some("0123456789abcdef"));
-        assert_eq!(pages[2].community.as_deref(), Some("오이카페 \"모에화\""));
+        assert_eq!(
+            parse(&message),
+            Some(Message::Page(Page {
+                signed_in: Some(false),
+                presence: Some("watching-replay".into()),
+                community: Some("오이카페 \"모에화\"".into()),
+                group: None,
+            }))
+        );
     }
 
     #[test]

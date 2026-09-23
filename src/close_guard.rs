@@ -1,12 +1,13 @@
 //! Closing the window over a drawing asks first.
 //!
 //! Closing a window unloads its page without asking it on any platform, so
-//! the app asks first: the page's own `beforeunload` handlers are asked the
-//! way a browser asks them (would_lose_work.js), and if one would keep a
-//! browser on the page, the player is asked whether to leave anyway. Every
-//! handler runs for real, so one that did more than answer -- sent a
-//! "goodbye" to a server, say -- would do it here too, though the player may
-//! yet stay. The site's only handler, the painter's, just answers.
+//! the app asks first: the page asks its own `beforeunload` handlers the way
+//! a browser asks them (`window.oeeeApp.wouldLoseWork()`, app_bridge.jinja in
+//! oeee-cafe/web), and if one would keep a browser on the page, the player
+//! is asked whether to leave anyway. Every handler runs for real, so one that
+//! did more than answer -- sent a "goodbye" to a server, say -- would do it
+//! here too, though the player may yet stay. The site's only handler, the
+//! painter's, just answers.
 //!
 //! The site also says whether a page is painting (`painting` in its `page`
 //! message, bridge.rs), but the handlers are what the page itself decides by,
@@ -19,7 +20,10 @@ use tauri::{AppHandle, Manager, Window, WindowEvent};
 
 use crate::{dialogs, WINDOW};
 
-const WOULD_LOSE_WORK: &str = include_str!("would_lose_work.js");
+/// Whether leaving now would lose something, as the page answers it; a page
+/// that is not the site's -- the loader -- has nothing to lose. Evaluated for
+/// its answer.
+const WOULD_LOSE_WORK: &str = "window.oeeeApp ? window.oeeeApp.wouldLoseWork() : false";
 
 /// Set while the question is on screen, so a second click on the close
 /// button does not stack a second one behind it.
@@ -72,18 +76,5 @@ fn after_leaving(app: &AppHandle, then: impl FnOnce(&AppHandle) + Send + 'static
         // A page that cannot be asked cannot answer; do not keep the player.
         ASKING.store(false, Ordering::SeqCst);
         let _ = window.destroy();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_page_is_asked_as_a_browser_asks_it() {
-        assert!(WOULD_LOSE_WORK.contains(r#"initEvent("beforeunload", false, true)"#));
-        assert!(WOULD_LOSE_WORK.contains("window.dispatchEvent(event)"));
-        // Evaluated for its answer, so it ends as an expression.
-        assert!(WOULD_LOSE_WORK.trim_end().ends_with("})()"));
     }
 }

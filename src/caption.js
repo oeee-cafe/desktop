@@ -22,11 +22,11 @@
   };
 
   var style = document.createElement("style");
+  // Only the buttons' own look. The room the toolbar keeps for them at its
+  // end is the site's (ds.css in oeee-cafe/web), keyed on the root's
+  // data-desktop="windows", which the site sets from the user agent
+  // (theme_head.jinja; chrome.rs names the app there).
   style.textContent = [
-    // Room for the three buttons at the toolbar's end, and the sections'
-    // row, when the toolbar stacks, reaching back under them.
-    'html[data-desktop="windows"] .nav-bar #menubar { padding-right: 150px; }',
-    'html[data-desktop="windows"] .nav-bar.is-stacked .toolbar-links { width: calc(100% + 138px); margin-right: -138px; }',
     ".oeee-caption { position: absolute; top: 0; right: 0; z-index: 60; display: flex; height: 52px; }",
     ".oeee-caption.is-loose { position: fixed; }",
     ".oeee-caption button { display: flex; align-items: center; justify-content: center;" +
@@ -162,12 +162,14 @@
   }
 
   // htmx swaps the body on boosted navigation, toolbar and all, so the
-  // controls are put back whenever the document changes.
+  // controls are put back whenever the document changes. The toolbar is
+  // found by the mark the site gives the bar that moves the window
+  // (toolbar.jinja), not by its class.
   function place() {
     addStyle();
     if (!document.body) return;
     report();
-    var bar = document.querySelector(".nav-bar");
+    var bar = document.querySelector("[data-window-drag]");
     var existing = document.getElementById("oeee-caption");
     if (existing && (bar ? existing.parentNode === bar : existing.parentNode === document.body)) return;
     if (existing) existing.parentNode.removeChild(existing);

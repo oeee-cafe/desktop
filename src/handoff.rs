@@ -8,24 +8,22 @@
 //! the browser at the URL it is given, and the page asks the site until the
 //! browser has finished, at which point the site signs this window in.
 //!
-//! The app's whole part is opening a browser. Every request is the page's, so
-//! each carries the page's cookie and origin; the app never holds the session
-//! and never sees the secret that claims the handoff.
+//! The page's half is the site's own (`window.oeeeSignIn`, app_sign_in.jinja
+//! in oeee-cafe/web), shared with the other apps. The app's whole part is
+//! stopping the link, opening a browser when the page asks (`browse` on the
+//! bridge, bridge.rs), and saying when it could not or when the window comes
+//! back. Every request is the page's, so each carries the page's cookie and
+//! origin; the app never holds the session and never sees the secret that
+//! claims the handoff.
 //!
 //! Steam's sign-in next door is the shape this follows: the link is stopped
 //! and the app carries it out, rather than being followed.
 
-use tauri::{AppHandle, Listener, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
 use crate::{site, WINDOW};
-
-/// Runs at the start of every page: the half of this that the page does.
-pub const SCRIPT: &str = include_str!("handoff.js");
-
-/// The event handoff.js asks for a browser in.
-pub const EVENT: &str = "oeee-handoff";
 
 /// The providers signed in this way, by the path the site links to.
 const PROVIDERS: [(&str, &str); 2] = [("/auth/apple", "apple"), ("/auth/google", "google")];
@@ -44,7 +42,8 @@ pub fn sign_in_link(url: &Url, site: &Url) -> Option<(&'static str, Option<Strin
     Some((provider, next))
 }
 
-/// Stops the link and starts the sign-in the page will carry.
+/// Stops the link and hands the sign-in to the page, to carry through the
+/// browser.
 pub fn sign_in(app: &AppHandle, provider: &str, next: Option<String>) {
     let Some(window) = app.get_webview_window(WINDOW) else {
         return;
@@ -55,32 +54,32 @@ pub fn sign_in(app: &AppHandle, provider: &str, next: Option<String>) {
     };
     let provider = serde_json::to_string(provider).unwrap_or_else(|_| "\"\"".to_owned());
     let _ = window.eval(format!(
-        "window.oeeeHandoffAuth && window.oeeeHandoffAuth.begin({provider}, {next});"
+        "window.oeeeSignIn && window.oeeeSignIn.browser({provider}, {next});"
     ));
 }
 
-/// Opens the browser where the page asks, once it has a handoff to carry.
+/// Opens the browser where the page asks, once it has a handoff to carry
+/// (`browse` on the bridge), or tells the page it could not.
 ///
 /// Only at the site's own URLs: the page is the site's, but the window is the
 /// app's, and a page is not given the run of whatever the browser will open.
-pub fn listen(app: &AppHandle, site: &Url) {
-    let (app, site) = (app.clone(), site.clone());
-    let opener = app.clone();
-    app.listen_any(EVENT, move |event| {
-        let Ok(url) = serde_json::from_str::<String>(event.payload()) else {
-            return;
-        };
-        let Ok(url) = Url::parse(&url) else {
-            return;
-        };
-        if !site::is_site(&url, &site) {
+pub fn browse(app: &AppHandle, site: &Url, url: &str) {
+    let opened = match Url::parse(url) {
+        Ok(url) if site::is_site(&url, site) => app
+            .opener()
+            .open_url(url.as_str(), None::<&str>)
+            .map_err(|error| eprintln!("could not open the sign-in in the browser: {error}"))
+            .is_ok(),
+        _ => {
             eprintln!("a page asked for a browser somewhere that is not the site: {url}");
-            return;
+            false
         }
-        if let Err(error) = opener.opener().open_url(url.as_str(), None::<&str>) {
-            eprintln!("could not open the sign-in in the browser: {error}");
+    };
+    if !opened {
+        if let Some(window) = app.get_webview_window(WINDOW) {
+            let _ = window.eval("window.oeeeSignIn && window.oeeeSignIn.unopened();");
         }
-    });
+    }
 }
 
 /// The window coming back to the front is somebody returning from the
@@ -96,7 +95,7 @@ pub fn on_window_event<R: tauri::Runtime>(window: &tauri::Window<R>, event: &tau
 }
 
 fn ask_now<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
-    let _ = window.eval("window.oeeeHandoffAuth && window.oeeeHandoffAuth.resume();");
+    let _ = window.eval("window.oeeeSignIn && window.oeeeSignIn.resume();");
 }
 
 /// The scheme the browser is sent to once the provider has answered.

@@ -207,7 +207,7 @@ pub fn sign_in(app: &AppHandle, steam: Arc<Steam>, next: Option<String>) {
         }
         Err(error) => {
             eprintln!("no Steam ticket: {error}");
-            let message = words::words().steam_sign_in_failed.to_owned();
+            let message = words::words().steam_sign_in_failed;
             dialogs::ask(&app, dialogs::Question::Alert(message), |_| {});
         }
     });
