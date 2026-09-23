@@ -18,12 +18,8 @@ use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, Window, WindowEvent};
 
+use crate::leave::WOULD_LOSE_WORK;
 use crate::{dialogs, WINDOW};
-
-/// Whether leaving now would lose something, as the page answers it; a page
-/// that is not the site's -- the loader -- has nothing to lose. Evaluated for
-/// its answer.
-const WOULD_LOSE_WORK: &str = "window.oeeeApp ? window.oeeeApp.wouldLoseWork() : false";
 
 /// Set while the question is on screen, so a second click on the close
 /// button does not stack a second one behind it.

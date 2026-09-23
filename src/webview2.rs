@@ -207,18 +207,15 @@ impl<T> OnWindowThread<T> {
     }
 }
 
-/// The page's loading bar, for a page the player has agreed to leave
-/// (`on_script_dialogs`).
-const SHOW_LEAVING: &str = "window.oeeeLoadingBar && window.oeeeLoadingBar.start(null);";
-
 /// The page asking before it is left, as the system's dialog (dialogs.rs)
 /// instead of WebView2's "oeee.cafe says". The page waits, as it would for the
 /// browser's, until the player answers. The site asks nothing else of the
 /// browser's dialogs -- no `alert()`, `confirm()` or `prompt()` -- and with
 /// WebView2's own turned off, one that came would be answered as cancelled.
 ///
-/// A Leave puts the page's loading bar up (loading_bar.jinja in oeee-cafe/web).
-/// The page puts it up at the press for every other load, but not for one it
+/// A Leave tells the page it is being left (`oeeeApp.leaving()`, leave.rs),
+/// which puts its loading bar up (loading_bar.jinja in oeee-cafe/web). The
+/// page puts it up at the press for every other load, but not for one it
 /// asks about: a bar up before a Stay would hang there, and only the app hears
 /// the answer. WebView2 keeps painting the page until the next one arrives.
 fn on_script_dialogs(webview: &tauri::webview::PlatformWebview, app: tauri::AppHandle) {
@@ -255,7 +252,7 @@ fn on_script_dialogs(webview: &tauri::webview::PlatformWebview, app: tauri::AppH
                     let _ = deferral.Complete();
                     if agreed {
                         if let Some(window) = page.get_webview_window(crate::WINDOW) {
-                            let _ = window.eval(SHOW_LEAVING);
+                            let _ = window.eval(crate::leave::LEAVING);
                         }
                     }
                 });

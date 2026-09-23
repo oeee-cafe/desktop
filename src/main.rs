@@ -34,6 +34,7 @@ mod downloads;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod handoff;
 mod keys;
+mod leave;
 mod microsoft;
 mod navigation;
 // What a page that failed is sent back to is WebView2's to report (webview2.rs).
