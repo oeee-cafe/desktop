@@ -82,35 +82,20 @@ pub fn action(key: u32, held: Modifiers) -> Option<Action> {
     }
 }
 
-/// Where a command goes when the page showing cannot carry it out itself --
-/// the loader, or a page without the toolbar. Commands that are not a place
-/// (a new drawing, which the toolbar's form starts; the shortcuts panel) do
-/// nothing there, having nowhere to go instead.
-fn fallback(command: &str) -> Option<&'static str> {
-    Some(match command {
-        "search" => "/search",
-        "account" => "/account",
-        "recent" => "/",
-        "following" => "/home",
-        "communities" => "/communities",
-        "together" => "/collaborate",
-        "hashtags" => "/hashtags",
-        _ => return None,
-    })
-}
-
 /// The script that carries out a site command in the page showing
-/// (keys_command.js): the site's own `window.oeeeCommand`, or else a plain
-/// load of the page it would go to.
-pub fn command_script(command: &str, site: &url::Url) -> String {
-    let fallback = fallback(command)
-        .and_then(|path| site.join(path).ok())
-        .map(String::from);
+/// (keys_command.js): the site's own `window.oeeeCommand` (toolbar.jinja in
+/// oeee-cafe/web), which is the one list of what each command does.
+///
+/// A page without the toolbar -- a replay, or the loader before the site
+/// has arrived -- has no `oeeeCommand`, and there the key does nothing.
+/// This used to fall back to loading the command's page from a table of
+/// the site's routes kept here, which was a second copy of them to keep in
+/// step; going nowhere from a replay was judged the smaller cost.
+pub fn command_script(command: &str) -> String {
     format!(
-        "{}({}, {});",
+        "{}({});",
         COMMAND.trim_end(),
         serde_json::to_string(command).expect("a string serialises"),
-        serde_json::to_string(&fallback).expect("a string serialises"),
     )
 }
 
@@ -120,7 +105,7 @@ const COMMAND: &str = include_str!("keys_command.js");
 /// forward or reloading is the page's own, so a page holding a drawing asks
 /// first; closing asks as the close button does (close_guard.rs).
 #[cfg(windows)]
-fn act(window: &tauri::WebviewWindow, site: &url::Url, action: Action) {
+fn act(window: &tauri::WebviewWindow, action: Action) {
     let script = match action {
         Action::Back => "history.back();".to_owned(),
         Action::Forward => "history.forward();".to_owned(),
@@ -129,17 +114,17 @@ fn act(window: &tauri::WebviewWindow, site: &url::Url, action: Action) {
             let _ = window.close();
             return;
         }
-        Action::Command(name) => command_script(name, site),
+        Action::Command(name) => command_script(name),
     };
     let _ = window.eval(script);
 }
 
 /// Answers the window's keys, which WebView2 hands over (webview2.rs).
 #[cfg(windows)]
-pub fn attach(window: &tauri::WebviewWindow, site: &url::Url) -> tauri::Result<()> {
-    let (keys_window, site) = (window.clone(), site.clone());
+pub fn attach(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    let keys_window = window.clone();
     window.with_webview(move |webview| {
-        crate::webview2::on_keys(&webview, move |action| act(&keys_window, &site, action));
+        crate::webview2::on_keys(&webview, move |action| act(&keys_window, action));
     })
 }
 
@@ -219,15 +204,10 @@ mod tests {
     }
 
     #[test]
-    fn a_command_falls_back_to_its_page() {
-        let site = url::Url::parse("https://oeee.cafe/").unwrap();
-        let script = command_script("search", &site);
+    fn a_command_is_the_site_s_to_carry_out() {
+        let script = command_script("search");
         assert!(script.contains("window.oeeeCommand(command)"));
-        assert!(script.contains("location.href = fallback"));
-        assert!(script.ends_with(r#"})("search", "https://oeee.cafe/search");"#));
-        // Opening the shortcuts panel, or starting a drawing, has no page to
-        // go to instead.
-        assert!(command_script("shortcuts", &site).ends_with(r#"("shortcuts", null);"#));
-        assert!(command_script("new-drawing", &site).ends_with(r#"("new-drawing", null);"#));
+        assert!(script.ends_with(r#"})("search");"#));
+        assert!(!script.contains("location"));
     }
 }

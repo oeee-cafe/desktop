@@ -136,7 +136,7 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
     #[cfg(windows)]
     {
         webview2::attach(&window)?;
-        keys::attach(&window, site)?;
+        keys::attach(&window)?;
         offline::attach(&window, site, &loader)?;
         snap::attach(&window)?;
     }
