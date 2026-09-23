@@ -9,8 +9,9 @@
 //! not browser accelerators and keep working, and the ones a program answers
 //! to -- back, forward, reload, close -- are the app's (`on_keys`, keys.rs).
 //!
-//! The page's `alert()`, `confirm()` and leaving a page with unsaved work are
-//! asked as the system's dialogs (`on_script_dialogs`, dialogs.rs), and the
+//! Leaving a page with unsaved work is asked as the system's dialog
+//! (`on_script_dialogs`, dialogs.rs) -- WebView2's other script dialogs are
+//! off, the site calling neither `alert()` nor `confirm()` -- and the
 //! right-click menu keeps only what a program's would have
 //! (`on_context_menu`, context_menu.rs). WebView2's switch for that menu would
 //! take Cut, Copy and Paste out of text fields as well, so it is trimmed

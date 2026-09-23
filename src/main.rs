@@ -33,6 +33,8 @@ mod dialogs;
 mod downloads;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod handoff;
+// The keys are WebView2's to hand over (webview2.rs).
+#[cfg_attr(not(windows), allow(dead_code))]
 mod keys;
 mod leave;
 mod microsoft;

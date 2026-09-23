@@ -10,10 +10,6 @@
 //! kept here in each of its languages, which a reader's choice on the site
 //! never reached and a change of wording on the site never updated. English
 //! stays for before the first page has said anything.
-//!
-//! The app's name, the title over the page's own `alert()` and `confirm()`,
-//! is the app's to say in any language, and follows the system's, as every
-//! other program's title does.
 
 use std::sync::RwLock;
 

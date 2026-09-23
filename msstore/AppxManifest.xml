@@ -28,7 +28,10 @@
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
   </Dependencies>
 
-  <!-- The languages of words.rs; the first is the default. -->
+  <!-- The languages the app speaks itself, on the loader before the site
+       has come (loader/index.html; words.rs holds only English, for before
+       the first page has sent its words), and the site's; the first is the
+       default. -->
   <Resources>
     <Resource Language="en-us" />
     <Resource Language="ko-kr" />
