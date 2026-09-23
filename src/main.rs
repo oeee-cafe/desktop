@@ -81,7 +81,7 @@ fn loader(site: &Url) -> String {
 /// Acts on what the site says (bridge.rs): the unread count on the icon,
 /// what the player is doing for their Steam friends, the ground behind the
 /// page, the words for the app's own dialogs, a sign-in to open in the
-/// browser, and a Steam ticket.
+/// browser, and Steam's sign-in and store.
 fn listen_to_the_site(
     app: &App,
     window: &WebviewWindow,
@@ -107,14 +107,20 @@ fn listen_to_the_site(
         }
         Some(bridge::Message::Words(said)) => words::heard(said),
         Some(bridge::Message::Browse { url }) => handoff::browse(window.app_handle(), &site, &url),
-        // Only a page the Steam build marked asks, so a window without Steam
-        // is never waited on.
-        Some(bridge::Message::SteamTicket) => {
+        // Only a page the Steam build marked asks for either, so a window
+        // without Steam -- the Microsoft Store's build among them -- is never
+        // waited on, and has nothing to answer with.
+        Some(bridge::Message::SignIn { provider }) if provider == "steam" => {
             if let Some(steam) = &steam {
-                steam::answer_ticket(window.app_handle(), steam.clone());
+                steam::answer_sign_in(window.app_handle(), steam.clone());
             }
         }
-        Some(bridge::Message::Other) | None => {}
+        Some(bridge::Message::Purchase { product }) => {
+            if let Some(steam) = &steam {
+                steam::open_store(steam, &product);
+            }
+        }
+        Some(bridge::Message::SignIn { .. } | bridge::Message::Other) | None => {}
     });
 }
 

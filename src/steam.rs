@@ -1,29 +1,33 @@
 //! Steam, when Steam started the app.
 //!
-//! Two things are asked of it. What the player is doing, for their friends
+//! Three things are asked of it. What the player is doing, for their friends
 //! list: the site says it in each `page` message it sends the app (bridge.rs;
 //! `src/web/presence.rs` in oeee-cafe/web), and the app hands it to Steam as
 //! rich presence, in the words of `steam/rich_presence.vdf`.
 //!
-//! And who the player is: a Web API ticket the site takes to Steam to find
-//! out (`src/steam.rs` in oeee-cafe/web). The page cannot ask Steam for one
-//! -- it has no way to Steam but the app -- so it asks the app, with a
-//! `steamTicket` message (bridge.rs), and the app answers by calling
-//! `oeeeApp.steam.ticket`. Everything done with the ticket is the page's
-//! (app_store.jinja in oeee-cafe/web): it takes the press on its own "Sign
-//! in with Steam" button and posts the ticket to `/auth/steam`, and it says
-//! so itself when there is none. The app knows no route of the site's, so
-//! the site can change any of them without a release of the app.
+//! Who the player is: a Web API ticket the site takes to Steam to find out
+//! (`src/steam.rs` in oeee-cafe/web). The page cannot ask Steam for one -- it
+//! has no way to Steam but the app -- so it sends `signIn` with the provider
+//! "steam" (bridge.rs), and the app answers `oeeeApp.signIn.answer` with the
+//! ticket, or with nothing when Steam would not give one. Everything done
+//! with the ticket is the page's (app_sign_in.jinja in oeee-cafe/web): it
+//! takes the press on its own "Sign in with Steam" button, posts the ticket,
+//! and says so itself when there is none. The app knows no route of the
+//! site's, so the site can change any of them without a release of the app.
 //!
-//! And, when Steam says a DLC has just been installed -- the Supporter Pack,
-//! bought in the overlay or the store while the app was open -- the app tells
-//! the page, which asks for a fresh ticket and has the site ask Steam again
-//! what the player owns, so the supporter badge follows at once.
+//! And the Supporter Pack, a DLC, which the page sells as every app's page
+//! sells (app_store.jinja): a `purchase` of its app id opens its store page
+//! in the overlay, where the buying happens, out of the app's sight. What
+//! the app hears is Steam saying a DLC has been installed, and then it hands
+//! the page a fresh ticket as proof with `oeeeApp.store.purchased`; the site
+//! asks Steam what that account owns, rather than taking the app's word, so
+//! the supporter badge follows at once and nothing the app says can forge
+//! it.
 //!
-//! Without Steam -- started from a terminal, or Steam not running -- the app is
-//! the same window onto the site it always was, and the page never asks: the
-//! site shows its Steam button, and asks for tickets, only on a page the app
-//! has marked `data-steam-app`.
+//! Without Steam -- started from a terminal, or Steam not running, or the
+//! Microsoft Store's build, which has none -- the app is the same window
+//! onto the site it always was, and the page never asks: the site shows
+//! Steam's buttons only on a page the app has marked `data-store="steam"`.
 
 // Without the `steam` feature, what reads pages and writes scripts for Steam
 // is still built and tested, and nothing calls it.
@@ -59,6 +63,10 @@ impl Steam {
     }
 
     pub fn on_dlc_installed(&self, _then: impl Fn(u32) + Send + 'static) {
+        match *self {}
+    }
+
+    pub fn show_store(&self, _app_id: u32) {
         match *self {}
     }
 }
@@ -118,33 +126,43 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Runs at the start of every page: tells the site Steam is here, which is
-/// what shows its "Sign in with Steam" button and lets the page ask for a
+/// Runs at the start of every page: tells the site this build sells through
+/// Steam, which is what shows Steam's buttons and lets the page ask for a
 /// ticket (mark_page.js).
 pub const MARK_PAGE: &str = include_str!("steam/mark_page.js");
 
 /// A value as JavaScript reads it: JSON, so a string arrives quoted and
 /// escaped, and cannot close its own quotes to run as script.
 fn quoted(value: &impl serde::Serialize) -> String {
-    serde_json::to_string(value).expect("a string serialises")
+    serde_json::to_string(value).expect("a value serialises")
 }
 
-/// Answers the page's `steamTicket` with a ticket, or with null when Steam
-/// would not give one. Guarded, as every call into the page is: a page that
-/// has gone since it asked -- or the loader, which never asks -- has no
-/// `oeeeApp.steam` to answer.
-fn ticket_script(ticket: Option<&str>) -> String {
+/// Answers the page's Steam sign-in with a ticket, or with `{}` when Steam
+/// would not give one, which the page tells the player about in its own
+/// words. Guarded, as every call into the page is: a page that has gone
+/// since it asked -- or the loader, which never asks -- has no
+/// `oeeeApp.signIn` to answer.
+fn sign_in_script(ticket: Option<&str>) -> String {
+    let told = match ticket {
+        Some(ticket) => serde_json::json!({ "ticket": ticket }),
+        None => serde_json::json!({}),
+    };
     format!(
-        "window.oeeeApp && window.oeeeApp.steam && window.oeeeApp.steam.ticket({});",
-        quoted(&ticket)
+        "window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.answer({});",
+        quoted(&told)
     )
 }
 
-/// Tells the page a DLC was installed. The page asks for a ticket and takes
-/// it to the site itself; it signs nobody in and moves no page, so it can
-/// happen mid-drawing.
-const DLC_INSTALLED: &str =
-    "window.oeeeApp && window.oeeeApp.steam && window.oeeeApp.steam.dlcInstalled();";
+/// Hands the page a ticket as proof of a DLC bought. The page posts it to
+/// the site, which asks Steam what the account owns; it signs nobody in, and
+/// reloads only when the site took something, so it can come mid-drawing
+/// with the same care as any purchase.
+fn purchased_script(ticket: &str) -> String {
+    format!(
+        "window.oeeeApp && window.oeeeApp.store && window.oeeeApp.store.purchased({});",
+        quoted(&[ticket])
+    )
+}
 
 /// Marks each page for Steam, and says the player is browsing whenever the
 /// window shows a page that is not the site's -- the loader, or its "can't be
@@ -167,25 +185,34 @@ pub fn prepare<'a, M: Manager<tauri::Wry>>(
         })
 }
 
-/// A DLC bought while the app is open -- the Supporter Pack -- is told to the
-/// page at once, so the site hears of it now rather than at its daily
-/// recheck.
+/// A DLC bought while the app is open -- the Supporter Pack, in the overlay
+/// `open_store` showed -- is handed to the page as a ticket at once, so the
+/// site hears of it now rather than at its daily recheck.
 pub fn watch_dlc(app: &AppHandle, steam: &Option<Arc<Steam>>) {
     let Some(steam) = steam else {
         return;
     };
     let app = app.clone();
+    let asker = steam.clone();
     steam.on_dlc_installed(move |_app_id| {
-        if let Some(window) = app.get_webview_window(WINDOW) {
-            let _ = window.eval(DLC_INSTALLED);
-        }
+        // Off the thread that pumps Steam's callbacks: the ticket arrives by
+        // one, so waiting for it there would wait forever.
+        let (app, steam) = (app.clone(), asker.clone());
+        std::thread::spawn(move || match steam.web_api_ticket() {
+            Ok(ticket) => {
+                if let Some(window) = app.get_webview_window(WINDOW) {
+                    let _ = window.eval(purchased_script(&ticket));
+                }
+            }
+            // The site rechecks daily, so the badge still comes, only later.
+            Err(error) => eprintln!("a DLC was installed, but no Steam ticket: {error}"),
+        });
     });
 }
 
-/// Gets a ticket from Steam and hands it to the page that asked for one, or
-/// null when Steam would not give one, which the page tells the player about
-/// in its own words. Off the main thread: Steam can take a moment to answer.
-pub fn answer_ticket(app: &AppHandle, steam: Arc<Steam>) {
+/// Gets a ticket from Steam and answers the page's sign-in with it. Off the
+/// main thread: Steam can take a moment to answer.
+pub fn answer_sign_in(app: &AppHandle, steam: Arc<Steam>) {
     let app = app.clone();
     std::thread::spawn(move || {
         let ticket = steam
@@ -193,9 +220,19 @@ pub fn answer_ticket(app: &AppHandle, steam: Arc<Steam>) {
             .inspect_err(|error| eprintln!("no Steam ticket: {error}"))
             .ok();
         if let Some(window) = app.get_webview_window(WINDOW) {
-            let _ = window.eval(ticket_script(ticket.as_deref()));
+            let _ = window.eval(sign_in_script(ticket.as_deref()));
         }
     });
+}
+
+/// Opens the overlay on a DLC's store page, where the player buys it; what
+/// comes of that arrives by `watch_dlc`. The page names the DLC by its app
+/// id, and anything else is the page's mistake, said and left.
+pub fn open_store(steam: &Steam, product: &str) {
+    match product.parse::<u32>() {
+        Ok(app_id) => steam.show_store(app_id),
+        Err(_) => eprintln!("not a Steam app id to sell: {product:?}"),
+    }
 }
 
 #[cfg(test)]
@@ -301,11 +338,24 @@ mod tests {
     }
 
     #[test]
-    fn a_ticket_reaches_the_page_quoted_as_javascript() {
+    fn a_ticket_answers_the_sign_in_quoted_as_javascript() {
         assert_eq!(
-            ticket_script(Some("14\"00ab")),
-            r#"window.oeeeApp && window.oeeeApp.steam && window.oeeeApp.steam.ticket("14\"00ab");"#
+            sign_in_script(Some("14\"00ab")),
+            r#"window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.answer({"ticket":"14\"00ab"});"#
         );
-        assert!(ticket_script(None).ends_with(".ticket(null);"));
+        assert!(sign_in_script(None).ends_with(".answer({});"));
+    }
+
+    #[test]
+    fn a_ticket_is_proof_of_a_purchase() {
+        assert_eq!(
+            purchased_script("1400abff"),
+            r#"window.oeeeApp && window.oeeeApp.store && window.oeeeApp.store.purchased(["1400abff"]);"#
+        );
+    }
+
+    #[test]
+    fn the_page_is_marked_as_selling_through_steam() {
+        assert!(MARK_PAGE.contains(r#"setAttribute("data-store", "steam")"#));
     }
 }

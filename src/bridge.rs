@@ -44,12 +44,21 @@ pub enum Message {
     /// Open this address in the system's browser: a sign-in the page is
     /// handing out (handoff.rs, app_sign_in.jinja).
     Browse { url: String },
-    /// The page needs a Steam Web API ticket, to sign in or to have the site
-    /// ask Steam what the player owns. Answered with `oeeeApp.steam.ticket`
-    /// (steam.rs); only a page the Steam build marked asks.
-    #[serde(rename = "steamTicket")]
-    SteamTicket,
-    /// Anything else the site says.
+    /// A sign-in the page is carrying (app_sign_in.jinja). The desktop's
+    /// only one of its own is Steam's, which the Steam build answers with a
+    /// Web API ticket (steam.rs); Apple and Google go by `browse` here, so a
+    /// page never asks for them, and anything but "steam" is left alone.
+    #[serde(rename = "signIn")]
+    SignIn { provider: String },
+    /// Sell this product, through the store the build sells through
+    /// (app_store.jinja). In the Steam build the product is the Steam app id
+    /// of a DLC, and selling it is showing its page in the overlay; the
+    /// Microsoft Store build sells nothing yet and marks no page, so no page
+    /// asks it.
+    Purchase { product: String },
+    /// Anything else the site says -- `prices` among it: the page shows its
+    /// button without a price when the app does not answer, which is what
+    /// the contract allows while the app has no way to ask Steam for one.
     #[serde(other)]
     Other,
 }
@@ -199,22 +208,49 @@ mod tests {
     }
 
     #[test]
-    fn a_page_asks_for_a_steam_ticket() {
+    fn a_page_asks_for_a_sign_in() {
         assert_eq!(
-            parse(&sent(r#"{"v":1,"type":"steamTicket"}"#)),
-            Some(Message::SteamTicket)
+            parse(&sent(r#"{"v":1,"type":"signIn","provider":"steam"}"#)),
+            Some(Message::SignIn {
+                provider: "steam".into()
+            })
         );
-        // A field the site adds later changes nothing.
+        // Another provider is still a sign-in; the app decides it is not its.
         assert_eq!(
-            parse(&sent(r#"{"v":1,"type":"steamTicket","extra":true}"#)),
-            Some(Message::SteamTicket)
+            parse(&sent(r#"{"v":1,"type":"signIn","provider":"apple","nonce":"n"}"#)),
+            Some(Message::SignIn {
+                provider: "apple".into()
+            })
         );
+        assert_eq!(parse(&sent(r#"{"v":1,"type":"signIn"}"#)), None);
+    }
+
+    #[test]
+    fn a_page_asks_to_buy_a_product() {
+        assert_eq!(
+            parse(&sent(r#"{"v":1,"type":"purchase","product":"3456780"}"#)),
+            Some(Message::Purchase {
+                product: "3456780".into()
+            })
+        );
+        // Fields the site used to send, or adds later, change nothing.
+        assert_eq!(
+            parse(&sent(
+                r#"{"v":1,"type":"purchase","product":"3456780","store":"steam","year":2026}"#
+            )),
+            Some(Message::Purchase {
+                product: "3456780".into()
+            })
+        );
+        assert_eq!(parse(&sent(r#"{"v":1,"type":"purchase"}"#)), None);
     }
 
     #[test]
     fn what_the_app_does_not_know_is_ignored() {
         for message in [
-            r#"{"v":1,"type":"signIn","provider":"apple","nonce":"n"}"#,
+            r#"{"v":1,"type":"prices","products":["3456780"]}"#,
+            r#"{"v":1,"type":"restore"}"#,
+            r#"{"v":1,"type":"steamTicket"}"#,
             r#"{"v":1,"type":"haptic","name":"light"}"#,
             r#"{"v":1,"type":"something-new"}"#,
         ] {

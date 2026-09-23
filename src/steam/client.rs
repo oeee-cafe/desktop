@@ -1,6 +1,6 @@
 //! Steam's API itself, in a build with the `steam` feature: the ticket the
 //! page asks for, the rich presence, handed to Steam as `super` works them out,
-//! and word of a DLC installed.
+//! the overlay's store page for a DLC, and word of one installed.
 
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
@@ -8,7 +8,10 @@ use std::time::Duration;
 
 use std::ffi::c_void;
 
-use steamworks::{sys, AuthTicket, Callback, CallbackHandle, Client, TicketForWebApiResponse};
+use steamworks::{
+    sys, AppId, AuthTicket, Callback, CallbackHandle, Client, OverlayToStoreFlag,
+    TicketForWebApiResponse,
+};
 
 use super::{hex, rich_presence};
 use crate::bridge::Page;
@@ -153,5 +156,15 @@ impl Steam {
     /// not wait on Steam itself -- a ticket, say -- without moving off it.
     pub fn on_dlc_installed(&self, then: impl Fn(u32) + Send + 'static) {
         *self.dlc_listener.lock().unwrap() = Some(Box::new(then));
+    }
+}
+
+impl Steam {
+    /// Shows a DLC's store page in the overlay. Steam does the selling there;
+    /// the app hears only that the DLC was installed, if it was.
+    pub fn show_store(&self, app_id: u32) {
+        self.client
+            .friends()
+            .activate_game_overlay_to_store(AppId(app_id), OverlayToStoreFlag::None);
     }
 }
