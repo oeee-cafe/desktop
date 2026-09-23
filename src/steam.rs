@@ -209,15 +209,22 @@ pub fn watch_dlc(app: &AppHandle, steam: &Option<Arc<Steam>>) {
     });
 }
 
-/// Gets a ticket from Steam and answers the page's sign-in with it. Off the
-/// main thread: Steam can take a moment to answer.
-pub fn answer_sign_in(app: &AppHandle, steam: Arc<Steam>) {
+/// Gets a ticket from Steam and answers the page's sign-in with it, or with
+/// nothing when there is no Steam to ask. Off the main thread: Steam can
+/// take a moment to answer.
+pub fn answer_sign_in(app: &AppHandle, steam: Option<Arc<Steam>>) {
     let app = app.clone();
     std::thread::spawn(move || {
-        let ticket = steam
-            .web_api_ticket()
-            .inspect_err(|error| eprintln!("no Steam ticket: {error}"))
-            .ok();
+        let ticket = match &steam {
+            Some(steam) => steam
+                .web_api_ticket()
+                .inspect_err(|error| eprintln!("no Steam ticket: {error}"))
+                .ok(),
+            None => {
+                eprintln!("a page asked for Steam's sign-in, and Steam is not here");
+                None
+            }
+        };
         if let Some(window) = app.get_webview_window(WINDOW) {
             let _ = window.eval(sign_in_script(ticket.as_deref()));
         }

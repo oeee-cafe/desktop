@@ -114,15 +114,10 @@ fn listen_to_the_site(
         Some(bridge::Message::Window { action }) => chrome::window_asked(&window, &action),
         Some(bridge::Message::Caption { place }) => chrome::caption_placed(&window, place),
         Some(bridge::Message::Browse { url }) => handoff::browse(window.app_handle(), &site, &url),
-        // Only a page whose user agent named Steam as the store asks for
-        // either (steam::store), so a window without Steam -- the Microsoft
-        // Store's build among them -- is never waited on, and has nothing to
-        // answer with.
-        Some(bridge::Message::SignIn { provider }) if provider == "steam" => {
-            if let Some(steam) = &steam {
-                steam::answer_sign_in(window.app_handle(), steam.clone());
-            }
-        }
+        // The page asks this app only for Steam's sign-in, and only where
+        // the user agent named Steam as the store (steam::store). Answered
+        // with nothing where there is no Steam, rather than left waiting.
+        Some(bridge::Message::SignIn) => steam::answer_sign_in(window.app_handle(), steam.clone()),
         // Likewise only a page whose user agent named a store asks what
         // anything costs or to buy it, and a build sells through one store
         // at most.
@@ -140,7 +135,7 @@ fn listen_to_the_site(
                 microsoft.sell(product);
             }
         }
-        Some(bridge::Message::SignIn { .. } | bridge::Message::Other) | None => {}
+        Some(bridge::Message::Other) | None => {}
     });
 }
 

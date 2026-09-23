@@ -44,12 +44,14 @@ pub enum Message {
     /// Open this address in the system's browser: a sign-in the page is
     /// handing out (handoff.rs, app_sign_in.jinja).
     Browse { url: String },
-    /// A sign-in the page is carrying (app_sign_in.jinja). The desktop's
-    /// only one of its own is Steam's, which the Steam build answers with a
-    /// Web API ticket (steam.rs); Apple and Google go by `browse` here, so a
-    /// page never asks for them, and anything but "steam" is left alone.
+    /// A sign-in the page is carrying (app_sign_in.jinja). The page decides
+    /// which provider each app signs in with itself, and the only one it
+    /// ever asks this app for is Steam's -- in the Steam build, whose user
+    /// agent names Steam -- which is answered with a Web API ticket
+    /// (steam.rs). Apple and Google go by `browse` here. So the provider it
+    /// names is not read: the app does what it is asked.
     #[serde(rename = "signIn")]
-    SignIn { provider: String },
+    SignIn,
     /// What these products cost, through the store the build sells through
     /// (app_store.jinja), answered with `oeeeApp.store.prices` -- or not at
     /// all, and the page shows its buttons without a price. Steam app ids
@@ -260,20 +262,13 @@ mod tests {
 
     #[test]
     fn a_page_asks_for_a_sign_in() {
-        assert_eq!(
-            parse(&sent(r#"{"v":1,"type":"signIn","provider":"steam"}"#)),
-            Some(Message::SignIn {
-                provider: "steam".into()
-            })
-        );
-        // Another provider is still a sign-in; the app decides it is not its.
-        assert_eq!(
-            parse(&sent(r#"{"v":1,"type":"signIn","provider":"apple","nonce":"n"}"#)),
-            Some(Message::SignIn {
-                provider: "apple".into()
-            })
-        );
-        assert_eq!(parse(&sent(r#"{"v":1,"type":"signIn"}"#)), None);
+        for message in [
+            r#"{"v":1,"type":"signIn","provider":"steam"}"#,
+            r#"{"v":1,"type":"signIn","provider":"apple","nonce":"n"}"#,
+            r#"{"v":1,"type":"signIn"}"#,
+        ] {
+            assert_eq!(parse(&sent(message)), Some(Message::SignIn), "{message}");
+        }
     }
 
     #[test]
