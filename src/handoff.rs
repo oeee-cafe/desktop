@@ -116,11 +116,17 @@ pub const RETURN_SCHEME: &str = "oeee-cafe";
 /// because which one happens is the platform's business, not ours.
 pub fn listen_for_return(app: &AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
-    // Windows and Linux want the scheme registered with the system; the
-    // installer does it for an installed copy, and this covers a copy run
-    // from the build directory. A failure is not worth stopping for: it only
-    // means the browser cannot knock, and the page still asks the site every
-    // couple of seconds.
+    // Windows and Linux want the scheme registered with the system, and the
+    // two Windows builds want it registered differently.
+    //
+    // Steam ships loose files into a depot folder and installs no package, so
+    // there is nothing to declare it for us and this is what registers it.
+    // The Store build is an MSIX, which takes its protocols from its manifest
+    // and only from there (msstore/AppxManifest.xml); inside the package this
+    // registry write is virtualised and does nothing, which is harmless.
+    //
+    // A failure is not worth stopping for either way: all it costs is the
+    // knock, and the page still asks the site every couple of seconds.
     #[cfg(any(windows, target_os = "linux"))]
     if let Err(error) = app.deep_link().register(RETURN_SCHEME) {
         eprintln!("could not register {RETURN_SCHEME}://: {error}");

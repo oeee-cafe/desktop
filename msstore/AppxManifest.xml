@@ -47,6 +47,24 @@
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png" />
+
+      <!-- Coming back from a sign-in done in the browser. The site sends the
+           browser to oeee-cafe://handoff/done once the provider has answered,
+           and being opened is all it is for: it brings the window forward and
+           the page asks the site at once (handoff.rs). It carries nothing.
+
+           A packaged app takes its protocols from here, and only from here.
+           The plugin registers this scheme in the registry at startup, which
+           is what the Steam build needs, because Steam ships loose files and
+           installs no package; inside MSIX that registry write is virtualised
+           and does nothing, and this is what counts instead. -->
+      <Extensions>
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="oeee-cafe">
+            <uap:DisplayName>Oeee Cafe</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+      </Extensions>
     </Application>
   </Applications>
 
