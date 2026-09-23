@@ -61,36 +61,3 @@ pub fn words() -> Words {
         .clone()
         .unwrap_or_default()
 }
-
-/// The title over the page's own `alert()` and `confirm()`, in the system's
-/// language.
-pub fn app_name() -> &'static str {
-    app_name_for(&sys_locale::get_locale().unwrap_or_default())
-}
-
-fn app_name_for(locale: &str) -> &'static str {
-    match locale.get(..2) {
-        Some("ko") => "오이카페",
-        Some("ja") => "OEEEカフェ",
-        Some("zh") => "黄瓜咖啡馆",
-        _ => "Oeee Cafe",
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_locale_picks_the_apps_name() {
-        assert_eq!(app_name_for("ko-KR"), "오이카페");
-        assert_eq!(app_name_for("ja"), "OEEEカフェ");
-        assert_eq!(app_name_for("zh-Hans-CN"), "黄瓜咖啡馆");
-    }
-
-    #[test]
-    fn anything_else_is_english() {
-        assert_eq!(app_name_for("fr-FR"), "Oeee Cafe");
-        assert_eq!(app_name_for(""), "Oeee Cafe");
-    }
-}

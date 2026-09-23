@@ -18,14 +18,13 @@
 
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2ContextMenuItemCollection, ICoreWebView2Environment9,
-    ICoreWebView2NavigationCompletedEventArgs2, ICoreWebView2ScriptDialogOpeningEventArgs,
+    ICoreWebView2NavigationCompletedEventArgs2,
     ICoreWebView2Settings2, ICoreWebView2Settings3, ICoreWebView2Settings4, ICoreWebView2_11, ICoreWebView2_2,
     COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND, COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_COMMAND,
     COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_SEPARATOR, COREWEBVIEW2_KEY_EVENT_KIND,
     COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN, COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
     COREWEBVIEW2_PHYSICAL_KEY_STATUS, COREWEBVIEW2_SCRIPT_DIALOG_KIND,
-    COREWEBVIEW2_SCRIPT_DIALOG_KIND_ALERT, COREWEBVIEW2_SCRIPT_DIALOG_KIND_BEFOREUNLOAD,
-    COREWEBVIEW2_SCRIPT_DIALOG_KIND_CONFIRM, COREWEBVIEW2_WEB_ERROR_STATUS,
+    COREWEBVIEW2_SCRIPT_DIALOG_KIND_BEFOREUNLOAD, COREWEBVIEW2_WEB_ERROR_STATUS,
     COREWEBVIEW2_WEB_ERROR_STATUS_CANNOT_CONNECT, COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_ABORTED,
     COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_RESET, COREWEBVIEW2_WEB_ERROR_STATUS_DISCONNECTED,
     COREWEBVIEW2_WEB_ERROR_STATUS_HOST_NAME_NOT_RESOLVED,
@@ -41,7 +40,7 @@ use windows::Win32::System::Com::{CoTaskMemFree, IStream};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT};
 
 use crate::context_menu::{self, Item};
-use crate::dialogs::{self, Question};
+use crate::dialogs;
 use crate::keys::{self, Modifiers};
 use crate::offline;
 
@@ -208,10 +207,11 @@ impl<T> OnWindowThread<T> {
     }
 }
 
-/// The page's `alert()`, `confirm()` and its asking before it is left, as the
-/// system's dialogs (dialogs.rs) instead of WebView2's "oeee.cafe says". The
-/// page waits, as it would for the browser's, until the player answers.
-/// `prompt()`, which the site never asks, answers as cancelled.
+/// The page asking before it is left, as the system's dialog (dialogs.rs)
+/// instead of WebView2's "oeee.cafe says". The page waits, as it would for the
+/// browser's, until the player answers. The site asks nothing else of the
+/// browser's dialogs -- no `alert()`, `confirm()` or `prompt()` -- and with
+/// WebView2's own turned off, one that came would be answered as cancelled.
 fn on_script_dialogs(webview: &tauri::webview::PlatformWebview, app: tauri::AppHandle) {
     unsafe {
         let Ok(core) = webview.controller().CoreWebView2() else {
@@ -229,16 +229,13 @@ fn on_script_dialogs(webview: &tauri::webview::PlatformWebview, app: tauri::AppH
             };
             let mut kind = COREWEBVIEW2_SCRIPT_DIALOG_KIND::default();
             args.Kind(&mut kind)?;
-            let question = match kind {
-                COREWEBVIEW2_SCRIPT_DIALOG_KIND_ALERT => Question::Alert(message(&args)?),
-                COREWEBVIEW2_SCRIPT_DIALOG_KIND_CONFIRM => Question::Confirm(message(&args)?),
-                COREWEBVIEW2_SCRIPT_DIALOG_KIND_BEFOREUNLOAD => Question::Leave,
-                _ => return Ok(()),
-            };
+            if kind != COREWEBVIEW2_SCRIPT_DIALOG_KIND_BEFOREUNLOAD {
+                return Ok(());
+            }
             let deferral = args.GetDeferral()?;
             let pending = OnWindowThread((args, deferral));
             let window_thread = app.clone();
-            dialogs::ask(&app, question, move |agreed| {
+            dialogs::ask_to_leave(&app, move |agreed| {
                 let _ = window_thread.run_on_main_thread(move || {
                     let (args, deferral) = pending.into_inner();
                     if agreed {
@@ -252,10 +249,6 @@ fn on_script_dialogs(webview: &tauri::webview::PlatformWebview, app: tauri::AppH
         let mut token = Default::default();
         let _ = core.add_ScriptDialogOpening(&handler, &mut token);
     }
-}
-
-unsafe fn message(args: &ICoreWebView2ScriptDialogOpeningEventArgs) -> windows::core::Result<String> {
-    take_string(|value| args.Message(value))
 }
 
 /// Trims WebView2's right-click menu to what a program's would have

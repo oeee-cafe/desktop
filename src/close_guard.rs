@@ -64,7 +64,7 @@ fn after_leaving(app: &AppHandle, then: impl FnOnce(&AppHandle) + Send + 'static
                 return then(&app);
             }
             let continuation = app.clone();
-            dialogs::ask(&app, dialogs::Question::Leave, move |leave| {
+            dialogs::ask_to_leave(&app, move |leave| {
                 ASKING.store(false, Ordering::SeqCst);
                 if leave {
                     then(&continuation);
