@@ -8,55 +8,20 @@
 //! the browser at the URL it is given, and the page asks the site until the
 //! browser has finished, at which point the site signs this window in.
 //!
-//! The page's half is the site's own (`window.oeeeApp.signIn`, app_sign_in.jinja
-//! in oeee-cafe/web), shared with the other apps. The app's whole part is
-//! stopping the link, opening a browser when the page asks (`browse` on the
+//! The page's half is the site's own (app_sign_in.jinja in oeee-cafe/web),
+//! shared with the other apps, and it starts itself: the page takes the
+//! press on the sign-in buttons, so the app never sees the link. The app's
+//! whole part is opening a browser when the page asks (`browse` on the
 //! bridge, bridge.rs), and saying when it could not or when the window comes
 //! back. Every request is the page's, so each carries the page's cookie and
 //! origin; the app never holds the session and never sees the secret that
 //! claims the handoff.
-//!
-//! Steam's sign-in next door is the shape this follows: the link is stopped
-//! and the app carries it out, rather than being followed.
 
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
 use crate::{site, WINDOW};
-
-/// The providers signed in this way, by the path the site links to.
-const PROVIDERS: [(&str, &str); 2] = [("/auth/apple", "apple"), ("/auth/google", "google")];
-
-/// Whether `url` is one of the site's links to sign in with a provider the
-/// browser has to carry, and if so which, and where it goes afterwards.
-pub fn sign_in_link(url: &Url, site: &Url) -> Option<(&'static str, Option<String>)> {
-    if !site::is_site(url, site) {
-        return None;
-    }
-    let (_, provider) = PROVIDERS.iter().find(|(path, _)| *path == url.path())?;
-    let next = url
-        .query_pairs()
-        .find(|(key, _)| key == "next")
-        .map(|(_, value)| value.into_owned());
-    Some((provider, next))
-}
-
-/// Stops the link and hands the sign-in to the page, to carry through the
-/// browser.
-pub fn sign_in(app: &AppHandle, provider: &str, next: Option<String>) {
-    let Some(window) = app.get_webview_window(WINDOW) else {
-        return;
-    };
-    let next = match next {
-        Some(next) => serde_json::to_string(&next).unwrap_or_else(|_| "null".to_owned()),
-        None => "null".to_owned(),
-    };
-    let provider = serde_json::to_string(provider).unwrap_or_else(|_| "\"\"".to_owned());
-    let _ = window.eval(format!(
-        "window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.browser({provider}, {next});"
-    ));
-}
 
 /// Opens the browser where the page asks, once it has a handoff to carry
 /// (`browse` on the bridge), or tells the page it could not.
@@ -146,42 +111,4 @@ pub fn returned(app: &AppHandle) {
     let _ = window.show();
     let _ = window.set_focus();
     ask_now(&window);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn site() -> Url {
-        Url::parse("https://oeee.cafe/").unwrap()
-    }
-
-    #[test]
-    fn the_sites_provider_links_are_the_ones_carried() {
-        let apple = Url::parse("https://oeee.cafe/auth/apple").unwrap();
-        assert_eq!(sign_in_link(&apple, &site()), Some(("apple", None)));
-
-        let google = Url::parse("https://oeee.cafe/auth/google?next=%2Faccount").unwrap();
-        assert_eq!(
-            sign_in_link(&google, &site()),
-            Some(("google", Some("/account".to_owned())))
-        );
-    }
-
-    #[test]
-    fn nothing_else_is() {
-        for away in [
-            // Another page of the site.
-            "https://oeee.cafe/login",
-            // Steam's, which the app signs in for itself.
-            "https://oeee.cafe/auth/steam/app",
-            // Where the browser comes back to, which is the browser's business.
-            "https://oeee.cafe/auth/apple/callback",
-            // Somebody else wearing the path.
-            "https://evil.test/auth/apple",
-        ] {
-            let url = Url::parse(away).unwrap();
-            assert_eq!(sign_in_link(&url, &site()), None, "{away}");
-        }
-    }
 }
