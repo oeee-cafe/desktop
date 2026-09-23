@@ -1,19 +1,16 @@
-//! Where a link goes: the window, the player's browser, Steam, or nowhere.
+//! Where a link goes: the window, the player's browser, or nowhere.
 //!
 //! The site and the bundled loader stay in the app's window; anything else is
 //! a link off the site, and goes to the browser the player already uses,
 //! where it has their sign-ins and an address bar. A replay file goes
-//! nowhere (downloads.rs), and the site's "Sign in with Steam" link is the
-//! app's to carry out (steam.rs).
-
-use std::sync::Arc;
+//! nowhere (downloads.rs).
 
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
-use crate::{downloads, site, steam, WINDOW};
+use crate::{downloads, site, WINDOW};
 
 /// Whether a navigation stays in the app's window.
 fn stays_in_app(url: &Url, site: &Url) -> bool {
@@ -40,20 +37,15 @@ pub fn prepare<'a, M: Manager<tauri::Wry>>(
     builder: WebviewWindowBuilder<'a, tauri::Wry, M>,
     app: &AppHandle,
     site: &Url,
-    steam: &Option<Arc<steam::Steam>>,
 ) -> WebviewWindowBuilder<'a, tauri::Wry, M> {
-    let navigation = (app.clone(), site.clone(), steam.clone());
+    let navigation = (app.clone(), site.clone());
     let new_window = (app.clone(), site.clone());
     builder
         .on_navigation(move |url| {
-            let (app, site, steam) = &navigation;
+            let (app, site) = &navigation;
             // Not in the window and not in the browser, which would
             // download it.
             if downloads::is_replay(url) {
-                return false;
-            }
-            if let (Some(steam), Some(next)) = (steam, steam::sign_in_link(url, site)) {
-                steam::sign_in(app, steam.clone(), next);
                 return false;
             }
             if stays_in_app(url, site) {

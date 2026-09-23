@@ -1,6 +1,7 @@
 // Runs at the start of every page: tells the site Steam is here, which is
-// what shows its "Sign in with Steam" link (steam.rs). WebView2 runs it
-// before the document has its root element, so it waits for one.
+// what shows its "Sign in with Steam" button and lets the page ask the app
+// for a ticket (steam.rs). WebView2 runs it before the document has its root
+// element, so it waits for one.
 (function () {
   function mark() {
     var root = document.documentElement;

@@ -1,5 +1,5 @@
-//! Steam's API itself, in a build with the `steam` feature: the ticket for
-//! signing in, the rich presence, handed to Steam as `super` works them out,
+//! Steam's API itself, in a build with the `steam` feature: the ticket the
+//! page asks for, the rich presence, handed to Steam as `super` works them out,
 //! and word of a DLC installed.
 
 use std::sync::mpsc::{self, Sender};

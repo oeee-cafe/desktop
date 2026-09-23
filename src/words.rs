@@ -1,7 +1,7 @@
 //! The few sentences the app says itself.
 //!
 //! What it says over a page -- the question before leaving a drawing, Copy
-//! link in the right-click menu, Steam failing to sign in -- is in the page's
+//! link in the right-click menu -- is in the page's
 //! language, not the system's: the site sends it in a `words` message
 //! (bridge.rs; the app-* messages in locales/*.ftl in oeee-cafe/web) once a
 //! page, so a reader who chose Korean on the site is asked in Korean on an
@@ -28,8 +28,6 @@ pub struct Words {
     pub leave_body: String,
     pub leave: String,
     pub stay: String,
-    /// Steam did not hand over a sign-in ticket.
-    pub steam_sign_in_failed: String,
     /// The right-click menu's item for a link (webview2.rs).
     #[cfg_attr(not(windows), allow(dead_code))]
     pub copy_link: String,
@@ -42,8 +40,6 @@ impl Default for Words {
             leave_body: "Anything you have not saved will be lost.".into(),
             leave: "Leave".into(),
             stay: "Stay".into(),
-            steam_sign_in_failed:
-                "Steam could not sign you in. Make sure Steam is running and try again.".into(),
             copy_link: "Copy link".into(),
         }
     }

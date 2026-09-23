@@ -80,8 +80,8 @@ fn loader(site: &Url) -> String {
 
 /// Acts on what the site says (bridge.rs): the unread count on the icon,
 /// what the player is doing for their Steam friends, the ground behind the
-/// page, the words for the app's own dialogs, and a sign-in to open in the
-/// browser.
+/// page, the words for the app's own dialogs, a sign-in to open in the
+/// browser, and a Steam ticket.
 fn listen_to_the_site(
     app: &App,
     window: &WebviewWindow,
@@ -107,6 +107,13 @@ fn listen_to_the_site(
         }
         Some(bridge::Message::Words(said)) => words::heard(said),
         Some(bridge::Message::Browse { url }) => handoff::browse(window.app_handle(), &site, &url),
+        // Only a page the Steam build marked asks, so a window without Steam
+        // is never waited on.
+        Some(bridge::Message::SteamTicket) => {
+            if let Some(steam) = &steam {
+                steam::answer_ticket(window.app_handle(), steam.clone());
+            }
+        }
         Some(bridge::Message::Other) | None => {}
     });
 }
@@ -126,11 +133,11 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
         .on_download(|webview, event| downloads::handle(&webview, event));
     let builder = chrome::prepare(builder).initialization_script(bridge::SCRIPT);
     let builder = steam::prepare(builder, steam, site);
-    let window = navigation::prepare(builder, app.handle(), site, steam).build()?;
+    let window = navigation::prepare(builder, app.handle(), site).build()?;
 
     listen_to_the_site(app, &window, site, steam.clone());
     handoff::listen_for_return(app.handle());
-    steam::watch_dlc(app.handle(), steam, site);
+    steam::watch_dlc(app.handle(), steam);
     chrome::paint_background(&window);
 
     #[cfg(windows)]

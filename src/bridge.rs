@@ -44,6 +44,11 @@ pub enum Message {
     /// Open this address in the system's browser: a sign-in the page is
     /// handing out (handoff.rs, app_sign_in.jinja).
     Browse { url: String },
+    /// The page needs a Steam Web API ticket, to sign in or to have the site
+    /// ask Steam what the player owns. Answered with `oeeeApp.steam.ticket`
+    /// (steam.rs); only a page the Steam build marked asks.
+    #[serde(rename = "steamTicket")]
+    SteamTicket,
     /// Anything else the site says.
     #[serde(other)]
     Other,
@@ -160,7 +165,7 @@ mod tests {
     #[test]
     fn the_words_are_the_pages() {
         let message = sent(
-            r#"{"v":1,"type":"words","leaveTitle":"이 페이지를 떠날까요?","leaveBody":"저장하지 않은 내용은 사라집니다.","leave":"떠나기","stay":"머무르기","ok":"확인","cancel":"취소","saveImage":"이미지 저장","copyImage":"이미지 복사","share":"공유…","copyLink":"링크 복사","savedImage":"사진에 저장했습니다","savedFile":"다운로드에 저장했습니다","saveFailed":"저장하지 못했습니다","steamSignInFailed":"Steam으로 로그인하지 못했습니다."}"#,
+            r#"{"v":1,"type":"words","leaveTitle":"이 페이지를 떠날까요?","leaveBody":"저장하지 않은 내용은 사라집니다.","leave":"떠나기","stay":"머무르기","ok":"확인","cancel":"취소","saveImage":"이미지 저장","copyImage":"이미지 복사","share":"공유…","copyLink":"링크 복사","savedImage":"사진에 저장했습니다","savedFile":"다운로드에 저장했습니다","saveFailed":"저장하지 못했습니다"}"#,
         );
         let Some(Message::Words(words)) = parse(&message) else {
             panic!("not understood: {message}");
@@ -169,7 +174,6 @@ mod tests {
         assert_eq!(words.leave, "떠나기");
         assert_eq!(words.stay, "머무르기");
         assert_eq!(words.copy_link, "링크 복사");
-        assert_eq!(words.steam_sign_in_failed, "Steam으로 로그인하지 못했습니다.");
     }
 
     #[test]
@@ -192,6 +196,19 @@ mod tests {
             })
         );
         assert_eq!(parse(&sent(r#"{"v":1,"type":"browse"}"#)), None);
+    }
+
+    #[test]
+    fn a_page_asks_for_a_steam_ticket() {
+        assert_eq!(
+            parse(&sent(r#"{"v":1,"type":"steamTicket"}"#)),
+            Some(Message::SteamTicket)
+        );
+        // A field the site adds later changes nothing.
+        assert_eq!(
+            parse(&sent(r#"{"v":1,"type":"steamTicket","extra":true}"#)),
+            Some(Message::SteamTicket)
+        );
     }
 
     #[test]

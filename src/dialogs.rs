@@ -3,8 +3,7 @@
 //! Closing the window over a drawing always asked this way. The page's own
 //! `alert()`, `confirm()` and leaving a page with unsaved work were left to
 //! WebView2, which draws them as a browser does -- titled "oeee.cafe says",
-//! in the browser's words. webview2.rs hands those here instead. The Steam
-//! sign-in failure is asked here directly (steam.rs).
+//! in the browser's words. webview2.rs hands those here instead.
 
 use rfd::{AsyncMessageDialog, MessageButtons, MessageDialogResult, MessageLevel};
 use tauri::{AppHandle, Manager};

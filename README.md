@@ -49,23 +49,26 @@ There is no macOS build: on the Mac, Oeee Cafe is the
 
 Started by Steam, the app marks every page `data-steam-app`, and the site's
 sign-in page shows "Sign in with Steam" (the account page, "Link your Steam
-account"). That link goes to `/auth/steam/app`. The app stops the
-navigation, asks Steam for a Web API ticket (`GetAuthTicketForWebApi`, with
-the identity `oeee-cafe`) and posts it to `/auth/steam` from the page, as a
-form on the page would. The site checks it with Steam itself, so the app is
-trusted with nothing (`src/steam.rs`).
+account"). The page takes that press itself: it sends the app a
+`steamTicket` message on the bridge, the app asks Steam for a Web API ticket
+(`GetAuthTicketForWebApi`, with the identity `oeee-cafe`) and hands it back
+by calling `oeeeApp.steam.ticket(hex)`, or `ticket(null)` when Steam would
+not give one, and the page posts it to `/auth/steam` -- or tells the player,
+in its own words, that it could not. The site checks the ticket with Steam
+itself, so the app is trusted with nothing, and knows none of the site's
+routes (`src/steam.rs`; `app_store.jinja` in oeee-cafe/web).
 
 When Steam says a DLC has been installed (`DlcInstalled_t`: the Supporter
 Pack, bought in the overlay or the store while the app is open), the app
-gets a fresh ticket and posts it in the background to `/auth/steam/refresh`
-from the page showing. The site asks Steam what that account owns and
-records it, so the supporter badge shows at once rather than at the site's
-daily recheck. It signs nobody in and moves no page, so a drawing in
-progress is left alone. The crate does not wrap that callback, so
-`steamworks` is built with `raw-bindings` for `src/steam/client.rs` to
-register it.
+calls `oeeeApp.steam.dlcInstalled()`. The page asks for a fresh ticket the
+same way and posts it in the background to `/auth/steam/refresh`, and the
+site asks Steam what that account owns and records it, so the supporter
+badge shows at once rather than at the site's daily recheck. It signs
+nobody in and moves no page, so a drawing in progress is left alone. The
+crate does not wrap that callback, so `steamworks` is built with
+`raw-bindings` for `src/steam/client.rs` to register it.
 
-Without Steam, the app starts as before and the link never shows. Steam's
+Without Steam, the app starts as before and the button never shows. Steam's
 library still has to be beside the binary: the app links it and will not
 start without it. `build.rs` puts it in `target/<profile>/`, and
 `tauri.conf.json` puts it in the Linux bundle; see the table below
