@@ -14,7 +14,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "appimage"],
+    "targets": [
+      "nsis",
+      "appimage"
+    ],
     "category": "GraphicsAndDesign",
     "copyright": "Oeee Cafe",
     "shortDescription": "Draw oekaki with everyone on Oeee Cafe",
@@ -29,6 +32,15 @@
         "files": {
           "/usr/lib/libsteam_api.so": "steam/redistributable/linux64/libsteam_api.so"
         }
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "oeee-cafe"
+        ]
       }
     }
   }

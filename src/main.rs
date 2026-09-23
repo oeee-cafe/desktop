@@ -117,6 +117,7 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
 
     listen_to_the_site(app, &window, steam.clone());
     handoff::listen(app.handle(), site);
+    handoff::listen_for_return(app.handle());
     steam::watch_dlc(app.handle(), steam, site);
     chrome::paint_background(&window);
 
@@ -139,11 +140,10 @@ fn main() {
         // First, as the plugin asks: a second launch hands over here and
         // exits, and the window already open comes forward.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window(WINDOW) {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            // Opening oeee-cafe://... while the app is running is a second
+            // launch carrying it, on the platforms where a scheme is handed
+            // over that way, so this is also how a sign-in comes back.
+            handoff::returned(app);
         }))
         // Where the window was, how big, and whether it was maximised or full
         // screen -- and not its decorations or visibility, which are the
@@ -158,6 +158,7 @@ fn main() {
                 )
                 .build(),
         )
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| Ok(setup(app, &site, &steam)?))
         .on_window_event(|window, event| {

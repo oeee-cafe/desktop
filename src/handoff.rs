@@ -91,8 +91,56 @@ pub fn on_window_event<R: tauri::Runtime>(window: &tauri::Window<R>, event: &tau
         return;
     }
     if let Some(window) = window.get_webview_window(WINDOW) {
-        let _ = window.eval("window.oeeeHandoffAuth && window.oeeeHandoffAuth.resume();");
+        ask_now(&window);
     }
+}
+
+fn ask_now<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    let _ = window.eval("window.oeeeHandoffAuth && window.oeeeHandoffAuth.resume();");
+}
+
+/// The scheme the browser is sent to once the provider has answered.
+///
+/// Registered so the browser can knock: the page in the window is asking the
+/// site every couple of seconds anyway, and would get there on its own the
+/// moment somebody switched back, but nobody should have to go looking for
+/// the window. It carries nothing -- the window is already holding the id
+/// and the secret that claim the sign-in -- so an app that took the scheme
+/// for itself would learn nothing by it.
+pub const RETURN_SCHEME: &str = "oeee-cafe";
+
+/// Hears the browser knock while the app is already running.
+///
+/// Where a scheme arrives as a second launch instead, single-instance hands
+/// it over and calls [`returned`] the same way (main.rs); both are wired
+/// because which one happens is the platform's business, not ours.
+pub fn listen_for_return(app: &AppHandle) {
+    use tauri_plugin_deep_link::DeepLinkExt;
+    // Windows and Linux want the scheme registered with the system; the
+    // installer does it for an installed copy, and this covers a copy run
+    // from the build directory. A failure is not worth stopping for: it only
+    // means the browser cannot knock, and the page still asks the site every
+    // couple of seconds.
+    #[cfg(any(windows, target_os = "linux"))]
+    if let Err(error) = app.deep_link().register(RETURN_SCHEME) {
+        eprintln!("could not register {RETURN_SCHEME}://: {error}");
+    }
+    let app = app.clone();
+    app.clone().deep_link().on_open_url(move |_event| {
+        returned(&app);
+    });
+}
+
+/// Brings the window forward when the browser knocks, and asks the site at
+/// once rather than waiting for the page's own clock.
+pub fn returned(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(WINDOW) else {
+        return;
+    };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+    ask_now(&window);
 }
 
 #[cfg(test)]
