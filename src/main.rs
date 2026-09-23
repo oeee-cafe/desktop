@@ -31,6 +31,7 @@ mod context_menu;
 mod dialogs;
 mod downloads;
 #[cfg_attr(not(windows), allow(dead_code))]
+mod handoff;
 mod keys;
 mod navigation;
 mod offline;
@@ -109,11 +110,13 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
         .on_download(|webview, event| downloads::handle(&webview, event));
     let builder = chrome::prepare(builder)
         .initialization_script(bridge::SCRIPT)
+        .initialization_script(handoff::SCRIPT)
         .initialization_script(offline::page_script());
     let builder = steam::prepare(builder, steam, site);
     let window = navigation::prepare(builder, app.handle(), site, steam).build()?;
 
     listen_to_the_site(app, &window, steam.clone());
+    handoff::listen(app.handle(), site);
     steam::watch_dlc(app.handle(), steam, site);
     chrome::paint_background(&window);
 
@@ -160,6 +163,7 @@ fn main() {
         .on_window_event(|window, event| {
             chrome::on_window_event(window, event);
             close_guard::on_window_event(window, event);
+            handoff::on_window_event(window, event);
         })
         .run(tauri::generate_context!())
         .expect("error while running Oeee Cafe");

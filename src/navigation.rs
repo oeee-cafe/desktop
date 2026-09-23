@@ -13,7 +13,7 @@ use tauri::{AppHandle, Manager, Runtime, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
-use crate::{downloads, site, steam, WINDOW};
+use crate::{downloads, handoff, site, steam, WINDOW};
 
 /// Whether a navigation stays in the app's window.
 fn stays_in_app(url: &Url, site: &Url) -> bool {
@@ -54,6 +54,13 @@ pub fn prepare<'a, M: Manager<tauri::Wry>>(
             }
             if let (Some(steam), Some(next)) = (steam, steam::sign_in_link(url, site)) {
                 steam::sign_in(app, steam.clone(), next);
+                return false;
+            }
+            // Apple's and Google's, which neither this window nor the
+            // browser can finish on its own: the sign-in goes out to the
+            // browser and the answer comes back through a handoff.
+            if let Some((provider, next)) = handoff::sign_in_link(url, site) {
+                handoff::sign_in(app, provider, next);
                 return false;
             }
             if stays_in_app(url, site) {
