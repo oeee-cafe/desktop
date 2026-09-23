@@ -220,7 +220,7 @@
 
       // The window's controls, straight to Tauri: this page is the app's own,
       // and the only one that may (capabilities/default.json).
-      if (/\bOeeeCafe\/windows\b/.test(navigator.userAgent)) {
+      if (/\bOeeeCafe platform\/windows\b/.test(navigator.userAgent)) {
         document.documentElement.classList.add("is-windows");
       }
       document.querySelector(".caption").addEventListener("click", function (event) {

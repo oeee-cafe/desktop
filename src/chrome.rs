@@ -22,21 +22,26 @@ use tauri::{Theme, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 
 /// What the app adds to the webview's user agent, which is how the site
 /// tells this window from a browser and from the other apps. Every app ends
-/// its user agent with a token of this one shape, `OeeeCafe/<app>`, so the
-/// site has one place to read which app it is in.
-pub const USER_AGENT_MARK: &str = "OeeeCafe/windows";
+/// its user agent with a mark of this one shape, `OeeeCafe platform/<app>`,
+/// so the site has one place to read which app it is in (theme_head.jinja
+/// in oeee-cafe/web).
+pub const USER_AGENT_MARK: &str = "OeeeCafe platform/windows";
 
-/// The webview's own user agent with the app's name at its end, and after it
-/// the store this build sells through, if it sells at all: ` store/steam`
-/// when Steam started it, ` store/microsoft` when it is the Microsoft
-/// Store's package, and nothing otherwise, so the site offers nothing to buy
-/// in a window that could not sell it. The site marks the root
-/// `data-store` from that, before the page paints.
+/// The word every app's mark starts with, as a word of its own.
+const APP: &str = "OeeeCafe";
+
+/// The webview's own user agent with the app's mark at its end, and straight
+/// after it the store this build sells through, if it sells at all:
+/// ` store/steam` when Steam started it, ` store/microsoft` when it is the
+/// Microsoft Store's package, and nothing otherwise, so the site offers
+/// nothing to buy in a window that could not sell it. The site marks the
+/// root `data-store` from that, before the page paints.
 ///
-/// Added once: a user agent that already names an app is left as it is.
+/// Added once: a user agent that already carries an app's mark is left as
+/// it is.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn user_agent(default: &str, store: Option<&str>) -> String {
-    if default.split(' ').any(|part| part.starts_with("OeeeCafe/")) {
+    if default.split(' ').any(|part| part == APP) {
         return default.to_owned();
     }
     match store {
@@ -181,19 +186,21 @@ mod tests {
     fn the_app_names_itself_once_after_the_webviews_own() {
         let edge = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0";
         let named = user_agent(edge, None);
-        assert_eq!(named, format!("{edge} OeeeCafe/windows"));
+        assert_eq!(named, format!("{edge} OeeeCafe platform/windows"));
         assert_eq!(user_agent(&named, None), named);
+        // Nor does a store change a mark already there.
+        assert_eq!(user_agent(&named, Some("steam")), named);
     }
 
     #[test]
     fn a_build_that_sells_names_its_store_after_the_app() {
         let edge = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0";
         let named = user_agent(edge, Some("steam"));
-        assert_eq!(named, format!("{edge} OeeeCafe/windows store/steam"));
+        assert_eq!(named, format!("{edge} OeeeCafe platform/windows store/steam"));
         assert_eq!(user_agent(&named, Some("steam")), named);
         assert_eq!(
             user_agent(edge, Some("microsoft")),
-            format!("{edge} OeeeCafe/windows store/microsoft")
+            format!("{edge} OeeeCafe platform/windows store/microsoft")
         );
     }
 

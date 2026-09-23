@@ -48,7 +48,8 @@ There is no macOS build: on the Mac, Oeee Cafe is the
 ## Signing in with Steam
 
 Started by Steam, the app ends its user agent with
-`OeeeCafe/windows store/steam` rather than `OeeeCafe/windows` alone, and
+`OeeeCafe platform/windows store/steam` rather than
+`OeeeCafe platform/windows` alone, and
 the site marks every page `data-store="steam"` from that before it paints.
 Only then does its sign-in page show "Sign in with Steam" (the account
 page, "Link your Steam account"). The page takes that press itself: it sends
@@ -107,7 +108,7 @@ Microsoft Store instead (below).
 
 In the Store's build the Supporter Pack is a durable add-on, sold through
 `Windows.Services.Store` (`src/microsoft.rs`). Running as the Store's
-package, the app ends its user agent with `OeeeCafe/windows
+package, the app ends its user agent with `OeeeCafe platform/windows
 store/microsoft`, and the site marks every page `data-store="microsoft"`;
 run unpackaged -- `cargo run --no-default-features` -- it names no store,
 since the Store answers nothing to an app it cannot identify, and the page
