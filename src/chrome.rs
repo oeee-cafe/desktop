@@ -3,7 +3,7 @@
 //! The site's toolbar is drawn as a window's title bar, and every page has it
 //! -- the painter pages too -- so on Windows the window has no title bar of
 //! its own: its minimise, maximise and close buttons are drawn at the
-//! toolbar's right end instead (caption.js). On Linux the system's title bar
+//! toolbar's right end instead, by the site (app_caption.jinja in oeee-cafe/web). On Linux the system's title bar
 //! stays, over the toolbar.
 //!
 //! The site lays itself out for this on its own. The app names itself at the
@@ -45,11 +45,6 @@ pub fn user_agent(default: &str, store: Option<&str>) -> String {
     }
 }
 
-/// Minimise, maximise or restore, and close, drawn into the toolbar on
-/// Windows. See caption.js.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub const WINDOWS_CAPTION: &str = include_str!("caption.js");
-
 /// The window's frame: on Windows no title bar, the toolbar drawing the
 /// window's controls instead. The window keeps its shadow, and with it the
 /// system's resize edges.
@@ -62,11 +57,44 @@ pub fn prepare<'a, R: tauri::Runtime, M: tauri::Manager<R>>(
     builder: WebviewWindowBuilder<'a, R, M>,
 ) -> WebviewWindowBuilder<'a, R, M> {
     #[cfg(windows)]
-    let builder = builder
-        .initialization_script(WINDOWS_CAPTION)
-        .decorations(false)
-        .shadow(true);
+    let builder = builder.decorations(false).shadow(true);
     builder
+}
+
+/// The toolbar's window controls asking for the window (a `window` message,
+/// app_caption.jinja in oeee-cafe/web): minimise, maximise or restore, and
+/// close -- which goes through CloseRequested as the system's button did,
+/// so a page holding a drawing is asked first (close_guard.rs).
+pub fn window_asked(window: &WebviewWindow, action: &str) {
+    let _ = match action {
+        "minimize" => window.minimize(),
+        "maximize" if window.is_maximized().unwrap_or(false) => window.unmaximize(),
+        "maximize" => window.maximize(),
+        "close" => window.close(),
+        _ => Ok(()),
+    };
+}
+
+/// Where the toolbar's maximise button is (a `caption` message): the Snap
+/// Layouts stand-in goes over it (snap.rs), and the page is told whether the
+/// window is maximised, which it cannot see for itself. The page says where
+/// its button is again whenever the window changes size, which is also when
+/// that may have changed.
+pub fn caption_placed(window: &WebviewWindow, place: Option<crate::bridge::Place>) {
+    #[cfg(windows)]
+    {
+        use tauri::Manager;
+        let place = place.and_then(crate::bridge::Place::bounded);
+        let _ = window
+            .app_handle()
+            .run_on_main_thread(move || crate::snap::place(place));
+    }
+    #[cfg(not(windows))]
+    let _ = place;
+    let maximized = window.is_maximized().unwrap_or(false);
+    let _ = window.eval(format!(
+        "window.oeeeApp && window.oeeeApp.caption && window.oeeeApp.caption({{maximized: {maximized}}})"
+    ));
 }
 
 /// The site's ground as the page last said it (`theme` on the bridge), which
@@ -167,31 +195,6 @@ mod tests {
             user_agent(edge, Some("microsoft")),
             format!("{edge} OeeeCafe/windows store/microsoft")
         );
-    }
-
-    #[test]
-    fn the_page_is_left_to_lay_itself_out() {
-        // The room for the buttons is ds.css's, and the drag region is in
-        // the toolbar's markup; the app neither marks the root nor looks for
-        // the toolbar by its class to do either.
-        assert!(!WINDOWS_CAPTION.contains("#menubar"));
-        assert!(!WINDOWS_CAPTION.contains(".toolbar-links"));
-        assert!(!WINDOWS_CAPTION.contains(r#"setAttribute("data-app""#));
-        assert!(!WINDOWS_CAPTION.contains("data-tauri-drag-region"));
-    }
-
-    #[test]
-    fn the_page_no_longer_reports_its_own_unread_count() {
-        // The site says it over the bridge (bridge.rs); reading the toolbar
-        // for it is what broke when the toolbar changed.
-        assert!(!WINDOWS_CAPTION.contains("toolbar-badge"));
-        assert!(!WINDOWS_CAPTION.contains("oeee-unread"));
-    }
-
-    #[test]
-    fn the_caption_draws_the_window_controls() {
-        assert!(WINDOWS_CAPTION.contains("oeee-caption"));
-        assert!(WINDOWS_CAPTION.contains(r#"invoke("close")"#));
     }
 
     #[test]

@@ -62,11 +62,56 @@ pub enum Message {
     /// Microsoft Store's it is an add-on's Store ID, and selling it is the
     /// Store's own purchase dialog.
     Purchase { product: String },
+    /// The toolbar's window controls on Windows (app_caption.jinja):
+    /// "minimize", "maximize" (which restores, too) or "close". The Mac's
+    /// "drag" and "zoom" are the iOS app's and not asked here.
+    Window { action: String },
+    /// Where the toolbar's maximise button is on Windows, for the Snap
+    /// Layouts stand-in over it (snap.rs): its place, or none.
+    Caption {
+        #[serde(default)]
+        place: Option<Place>,
+    },
     /// Anything else the site says -- `restore` among it, which neither
     /// store here has: Steam and the Microsoft Store both keep what was
     /// bought on the account, and the site asks them.
     #[serde(other)]
     Other,
+}
+
+/// The toolbar's maximise button's place in the window, in physical pixels
+/// from the top left of the window's client area -- which is where the
+/// webview starts.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+pub struct Place {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+/// The largest the stand-in may be on a side, so a page cannot spread it
+/// over the rest of itself: a caption button is 46 by 52 at 100%, and this
+/// is room for it at 400%.
+#[cfg_attr(not(windows), allow(dead_code))]
+const MOST: i32 = 256;
+
+// Only Windows has the stand-in (snap.rs) that is placed by it.
+#[cfg_attr(not(windows), allow(dead_code))]
+impl Place {
+    /// None for a button with no size, and one past a button's size as no
+    /// more than one.
+    pub fn bounded(self) -> Option<Place> {
+        if self.width <= 0 || self.height <= 0 {
+            return None;
+        }
+        Some(Place {
+            x: self.x.max(0),
+            y: self.y.max(0),
+            width: self.width.min(MOST),
+            height: self.height.min(MOST),
+        })
+    }
 }
 
 /// What the site says about the page showing, as far as the app uses it.
@@ -298,5 +343,35 @@ mod tests {
         assert_eq!(parse(&sent("not json")), None);
         assert_eq!(parse("3"), None);
         assert_eq!(parse("null"), None);
+    }
+
+    #[test]
+    fn the_toolbar_asks_for_the_window() {
+        assert_eq!(
+            parse(&sent(r#"{"v":1,"type":"window","action":"minimize"}"#)),
+            Some(Message::Window { action: "minimize".into() })
+        );
+    }
+
+    #[test]
+    fn the_page_says_where_its_button_is() {
+        let place = Place { x: 1782, y: 0, width: 69, height: 78 };
+        assert_eq!(
+            parse(&sent(r#"{"v":1,"type":"caption","place":{"x":1782,"y":0,"width":69,"height":78}}"#)),
+            Some(Message::Caption { place: Some(place) })
+        );
+        assert_eq!(
+            parse(&sent(r#"{"v":1,"type":"caption","place":null}"#)),
+            Some(Message::Caption { place: None })
+        );
+    }
+
+    #[test]
+    fn the_stand_in_is_never_bigger_than_a_button() {
+        assert_eq!(
+            Place { x: -5, y: -5, width: 5000, height: 5000 }.bounded(),
+            Some(Place { x: 0, y: 0, width: MOST, height: MOST })
+        );
+        assert_eq!(Place { x: 0, y: 0, width: 0, height: 52 }.bounded(), None);
     }
 }

@@ -124,10 +124,49 @@
       [hidden] {
         display: none;
       }
+      /* The window's own controls on Windows, at the top right where the
+         site's toolbar will draw them (app_caption.jinja in oeee-cafe/web),
+         so the window can be closed before the site has come, or when it
+         does not. Drawn only there: macOS and Linux keep their title bar. */
+      .caption {
+        position: fixed;
+        top: 0;
+        right: 0;
+        display: none;
+        height: 52px;
+      }
+      .is-windows .caption {
+        display: flex;
+      }
+      .caption button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 46px;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: 400 10px/1 "Segoe Fluent Icons", "Segoe MDL2 Assets";
+      }
+      .caption button:hover {
+        background: rgba(128, 128, 128, 0.12);
+      }
+      .caption button.is-close:hover {
+        background: #c42b1c;
+        color: #ffffff;
+      }
     </style>
   </head>
   <body>
     <div class="titlebar" data-tauri-drag-region></div>
+    <div class="caption">
+      <button type="button" data-window="minimize">&#xE921;</button>
+      <button type="button" data-window="toggle_maximize">&#xE922;</button>
+      <button type="button" class="is-close" data-window="close">&#xE8BB;</button>
+    </div>
     <main>
       <div class="brand">
         <img src="mark.png" alt="" draggable="false" />
@@ -178,6 +217,19 @@
       };
       var language = (navigator.language || "en").slice(0, 2);
       var words = WORDS[language] || WORDS.en;
+
+      // The window's controls, straight to Tauri: this page is the app's own,
+      // and the only one that may (capabilities/default.json).
+      if (/\bOeeeCafe\/windows\b/.test(navigator.userAgent)) {
+        document.documentElement.classList.add("is-windows");
+      }
+      document.querySelector(".caption").addEventListener("click", function (event) {
+        var button = event.target.closest("[data-window]");
+        var ipc = window.__TAURI_INTERNALS__;
+        if (button && ipc) {
+          ipc.invoke("plugin:window|" + button.getAttribute("data-window"), { label: "main" }).catch(function () {});
+        }
+      });
 
       // The spinner is the whole of it on screen; the words are for a
       // screen reader, not the eye.

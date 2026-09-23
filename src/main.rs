@@ -48,7 +48,7 @@ mod store;
 mod webview2;
 mod words;
 
-/// The app's one window. caption.js and `capabilities/default.json` name it
+/// The app's one window. The loader and `capabilities/default.json` name it
 /// too, and have to agree.
 pub const WINDOW: &str = "main";
 
@@ -60,13 +60,9 @@ fn site_capability(site: &Url) -> tauri::ipc::CapabilityBuilder {
         .window(WINDOW)
         .permission("core:window:allow-start-dragging")
         .permission("core:window:allow-internal-toggle-maximize")
-        // The Windows caption buttons in the toolbar (caption.js).
-        .permission("core:window:allow-minimize")
-        .permission("core:window:allow-toggle-maximize")
-        .permission("core:window:allow-is-maximized")
-        .permission("core:window:allow-close")
-        // The bridge (bridge.js), where the toolbar's maximise button is
-        // (snap.rs), and the page's answer to the Microsoft Store build's
+        // The bridge (bridge.js) -- by which the toolbar's window controls
+        // ask for the window, rather than being let at it themselves
+        // (chrome.rs) -- and the page's answer to the Microsoft Store build's
         // request for a ticket (microsoft.rs). Tauri 2's `emit` takes no
         // scope, so this cannot be held to those event names: a page of the
         // site may emit any event. Nothing listens for any other, and only
@@ -112,6 +108,8 @@ fn listen_to_the_site(
             }
         }
         Some(bridge::Message::Words(said)) => words::heard(said),
+        Some(bridge::Message::Window { action }) => chrome::window_asked(&window, &action),
+        Some(bridge::Message::Caption { place }) => chrome::caption_placed(&window, place),
         Some(bridge::Message::Browse { url }) => handoff::browse(window.app_handle(), &site, &url),
         // Only a page whose user agent named Steam as the store asks for
         // either (steam::store), so a window without Steam -- the Microsoft
