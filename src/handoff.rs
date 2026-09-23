@@ -8,7 +8,7 @@
 //! the browser at the URL it is given, and the page asks the site until the
 //! browser has finished, at which point the site signs this window in.
 //!
-//! The page's half is the site's own (`window.oeeeSignIn`, app_sign_in.jinja
+//! The page's half is the site's own (`window.oeeeApp.signIn`, app_sign_in.jinja
 //! in oeee-cafe/web), shared with the other apps. The app's whole part is
 //! stopping the link, opening a browser when the page asks (`browse` on the
 //! bridge, bridge.rs), and saying when it could not or when the window comes
@@ -54,7 +54,7 @@ pub fn sign_in(app: &AppHandle, provider: &str, next: Option<String>) {
     };
     let provider = serde_json::to_string(provider).unwrap_or_else(|_| "\"\"".to_owned());
     let _ = window.eval(format!(
-        "window.oeeeSignIn && window.oeeeSignIn.browser({provider}, {next});"
+        "window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.browser({provider}, {next});"
     ));
 }
 
@@ -77,7 +77,7 @@ pub fn browse(app: &AppHandle, site: &Url, url: &str) {
     };
     if !opened {
         if let Some(window) = app.get_webview_window(WINDOW) {
-            let _ = window.eval("window.oeeeSignIn && window.oeeeSignIn.unopened();");
+            let _ = window.eval("window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.unopened();");
         }
     }
 }
@@ -95,7 +95,7 @@ pub fn on_window_event<R: tauri::Runtime>(window: &tauri::Window<R>, event: &tau
 }
 
 fn ask_now<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
-    let _ = window.eval("window.oeeeSignIn && window.oeeeSignIn.resume();");
+    let _ = window.eval("window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.resume();");
 }
 
 /// The scheme the browser is sent to once the provider has answered.

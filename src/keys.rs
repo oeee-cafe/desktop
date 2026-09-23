@@ -18,7 +18,7 @@ pub enum Action {
     Forward,
     Reload,
     Close,
-    /// One of the site's commands, by the name `window.oeeeCommand` knows it
+    /// One of the site's commands, by the name `window.oeeeApp.command` knows it
     /// by (toolbar.jinja in oeee-cafe/web).
     Command(&'static str),
 }
@@ -83,11 +83,11 @@ pub fn action(key: u32, held: Modifiers) -> Option<Action> {
 }
 
 /// The script that carries out a site command in the page showing
-/// (keys_command.js): the site's own `window.oeeeCommand` (toolbar.jinja in
+/// (keys_command.js): the site's own `window.oeeeApp.command` (toolbar.jinja in
 /// oeee-cafe/web), which is the one list of what each command does.
 ///
 /// A page without the toolbar -- a replay, or the loader before the site
-/// has arrived -- has no `oeeeCommand`, and there the key does nothing.
+/// has arrived -- has no `oeeeApp.command`, and there the key does nothing.
 /// This used to fall back to loading the command's page from a table of
 /// the site's routes kept here, which was a second copy of them to keep in
 /// step; going nowhere from a replay was judged the smaller cost.
@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn a_command_is_the_site_s_to_carry_out() {
         let script = command_script("search");
-        assert!(script.contains("window.oeeeCommand(command)"));
+        assert!(script.contains("window.oeeeApp.command(command)"));
         assert!(script.ends_with(r#"})("search");"#));
         assert!(!script.contains("location"));
     }
