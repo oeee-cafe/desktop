@@ -37,20 +37,17 @@ pub fn user_agent(default: &str) -> String {
 #[cfg_attr(not(windows), allow(dead_code))]
 pub const WINDOWS_CAPTION: &str = include_str!("caption.js");
 
-/// The right-click menu kept to where it earns its place, by the page
-/// (context_menu.js). Windows does the same natively, and more exactly
-/// (context_menu.rs), so there the page is left alone.
-#[cfg_attr(windows, allow(dead_code))]
-const QUIET_CONTEXT_MENU: &str = include_str!("context_menu.js");
-
 /// The window's frame: on Windows no title bar, the toolbar drawing the
 /// window's controls instead. The window keeps its shadow, and with it the
 /// system's resize edges.
+///
+/// The right-click menu is trimmed on Windows only, natively
+/// (context_menu.rs). The app ships nowhere else -- macOS is the iOS app's
+/// -- so a build for another system is a developer's, and keeps the
+/// browser's whole menu, Inspect included.
 pub fn prepare<'a, R: tauri::Runtime, M: tauri::Manager<R>>(
     builder: WebviewWindowBuilder<'a, R, M>,
 ) -> WebviewWindowBuilder<'a, R, M> {
-    #[cfg(not(windows))]
-    let builder = builder.initialization_script(QUIET_CONTEXT_MENU);
     #[cfg(windows)]
     let builder = builder
         .initialization_script(WINDOWS_CAPTION)
@@ -164,12 +161,6 @@ mod tests {
         // for it is what broke when the toolbar changed.
         assert!(!WINDOWS_CAPTION.contains("toolbar-badge"));
         assert!(!WINDOWS_CAPTION.contains("oeee-unread"));
-    }
-
-    #[test]
-    fn links_get_no_menu_where_the_page_decides() {
-        assert!(QUIET_CONTEXT_MENU.contains(r#"closest("img")"#));
-        assert!(!QUIET_CONTEXT_MENU.contains("a[href]"));
     }
 
     #[test]
