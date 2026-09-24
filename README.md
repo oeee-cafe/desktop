@@ -217,9 +217,10 @@ cargo tauri build
 
 and put `target/release/oeee-cafe-desktop.exe` in `steam/content/windows/`,
 with `steam/redistributable/win64/steam_api64.dll` beside it; WebView2
-ships with Windows 10 and 11. Steam installs files; it does not run
-installers, so ship the executable rather than the NSIS installer. Set the
-depot's launch option in Steamworks (Installation > General) to the `.exe`.
+ships with Windows 10 and 11. Steam installs files and runs no installer,
+so the build makes none (`tauri.conf.json` leaves `bundle` inactive, and
+keeps only the `.exe`'s icon and copyright). Set the depot's launch option
+in Steamworks (Installation > General) to the `.exe`.
 
 Then upload:
 
