@@ -15,8 +15,7 @@
   "bundle": {
     "active": true,
     "targets": [
-      "nsis",
-      "appimage"
+      "nsis"
     ],
     "category": "GraphicsAndDesign",
     "copyright": "Oeee Cafe",
@@ -26,14 +25,7 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.ico"
-    ],
-    "linux": {
-      "appimage": {
-        "files": {
-          "/usr/lib/libsteam_api.so": "steam/redistributable/linux64/libsteam_api.so"
-        }
-      }
-    }
+    ]
   },
   "plugins": {
     "deep-link": {

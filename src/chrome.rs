@@ -3,8 +3,7 @@
 //! The site's toolbar is drawn as a window's title bar, and every page has it
 //! -- the painter pages too -- so on Windows the window has no title bar of
 //! its own: its minimise, maximise and close buttons are drawn at the
-//! toolbar's right end instead, by the site (app_caption.jinja in oeee-cafe/web). On Linux the system's title bar
-//! stays, over the toolbar.
+//! toolbar's right end instead, by the site (app_caption.jinja in oeee-cafe/web).
 //!
 //! The site lays itself out for this on its own. The app names itself at the
 //! end of the user agent (`user_agent`), from which the site marks its root

@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Upload built bundles to Steam with SteamPipe.
+# Upload the Windows build to Steam with SteamPipe.
 #
-#   STEAM_APP_ID=...  STEAM_DEPOT_WINDOWS=...  STEAM_DEPOT_LINUX=...
-#   STEAM_USER=...  ./steam/upload.sh [description]
+#   STEAM_APP_ID=...  STEAM_DEPOT_WINDOWS=...  STEAM_USER=...
+#   ./steam/upload.sh [description]
 #
-# The IDs are on the app's Steamworks page (SteamPipe > Depots). A depot whose
-# variable is unset, or whose content folder is empty, is left out, so one
-# platform can go up before the others are built. Place each platform's
-# unpacked build in steam/content/<platform>/ first -- see README.md.
+# The IDs are on the app's Steamworks page (SteamPipe > Depots). Place the
+# unpacked build in steam/content/windows/ first -- see README.md; with the
+# depot's variable unset or that folder empty there is nothing to upload.
 #
 # The build is set live on no branch. Choose the branch in Steamworks
 # (SteamPipe > Builds), which is where Valve's review picks it up.
@@ -43,7 +42,6 @@ add_depot() {
     }"
 }
 add_depot "${STEAM_DEPOT_WINDOWS:-}" windows
-add_depot "${STEAM_DEPOT_LINUX:-}" linux
 
 if [ -z "$depots" ]; then
   echo "nothing to upload" >&2

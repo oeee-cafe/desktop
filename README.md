@@ -95,10 +95,10 @@ page allows; the failure is logged.
 
 Without Steam, the app starts as before and the button never shows. Steam's
 library still has to be beside the binary: the app links it and will not
-start without it. `build.rs` puts it in `target/<profile>/`, and
-`tauri.conf.json` puts it in the Linux bundle; see the table below
-for Windows. The copies in `steam/redistributable/` are the ones the
-`steamworks` crate was built against; replace them together with it.
+start without it. `build.rs` puts it in `target/<profile>/`, and the depot
+has it beside the `.exe` (below). The copy in `steam/redistributable/` is
+the one the `steamworks` crate was built against; replace it along with
+the crate.
 
 To have Steam start a development build, put the app id in a
 `steam_appid.txt` in the directory you run it from.
@@ -209,26 +209,23 @@ OEEE_CAFE_WEB=~/src/oeee-cafe-web ./scripts/sync-app-contract.sh
 
 ## Building for Steam
 
-Bundles are built on the platform they are for:
+Build on Windows:
 
 ```bash
 cargo tauri build
 ```
 
-| Platform | Bundle | What goes in `steam/content/<platform>/` |
-| --- | --- | --- |
-| Windows | `target/release/oeee-cafe-desktop.exe` | the `.exe` and `steam/redistributable/win64/steam_api64.dll` beside it; WebView2 ships with Windows 10 and 11 |
-| Linux | `target/release/bundle/appimage/*.AppImage` | the AppImage |
-
-Steam installs files; it does not run installers, so ship the executable
-rather than the NSIS installer. Set each depot's launch option in Steamworks
-(Installation > General) to the file inside it.
+and put `target/release/oeee-cafe-desktop.exe` in `steam/content/windows/`,
+with `steam/redistributable/win64/steam_api64.dll` beside it; WebView2
+ships with Windows 10 and 11. Steam installs files; it does not run
+installers, so ship the executable rather than the NSIS installer. Set the
+depot's launch option in Steamworks (Installation > General) to the `.exe`.
 
 Then upload:
 
 ```bash
 STEAM_APP_ID=... STEAM_USER=... \
-STEAM_DEPOT_WINDOWS=... STEAM_DEPOT_LINUX=... \
+STEAM_DEPOT_WINDOWS=... \
 ./steam/upload.sh "0.1.0"
 ```
 
@@ -292,11 +289,6 @@ changing it.
 
 ## Not done yet
 
-- **Linux.** The build has not run. WebKitGTK is expected to show
-  `beforeunload` itself, and closing the window and saving a download go
-  through `rfd`'s GTK dialogs, as on Windows through its own. A page that
-  fails mid-session is not caught there (`src/offline.rs` watches WebView2
-  only), so it shows WebKitGTK's error page.
 - **The keys, dialogs and right-click menu on Windows.** Type-checked and
   unit-tested from macOS (`cargo check --target x86_64-pc-windows-msvc`),
   not yet run. Worth trying: Alt+Left and Ctrl+R over an unsaved drawing

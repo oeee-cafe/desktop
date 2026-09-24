@@ -35,7 +35,7 @@ serde = { version = "1", features = ["derive"] }
 # What tauri-plugin-dialog shows its dialogs with, without the plugin: it
 # replaces `window.confirm` in every page, the site's included, with one that
 # returns a Promise, and htmx reads a Promise as yes.
-rfd = { version = "0.16", default-features = false, features = ["gtk3", "common-controls-v6"] }
+rfd = { version = "0.16", default-features = false, features = ["common-controls-v6"] }
 
 # The same versions wry uses, for the WebView2 settings Tauri does not expose,
 # the window that stands in for the toolbar's maximise button (snap.rs), and
@@ -64,7 +64,8 @@ windows = { version = "0.61", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 
-# Elsewhere over rustls, so a Linux build needs no OpenSSL.
+# Elsewhere -- a developer's build on macOS, since only Windows ships -- over
+# rustls, ureq's own default.
 [target.'cfg(not(windows))'.dependencies]
 ureq = { version = "3", optional = true }
 

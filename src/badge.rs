@@ -1,18 +1,17 @@
 //! The unread count on the app's icon.
 //!
 //! The site says how many notifications are unread (an `unread` message,
-//! bridge.rs) whenever the number changes, and the app puts it where each
-//! system puts one: a number on the launcher's icon on Linux, and on
-//! Windows -- whose taskbar has no numbers -- a red dot over the taskbar
-//! button. A count of none or fewer shows nothing.
+//! bridge.rs) whenever the number changes, and the app shows that there are
+//! some the way Windows does, whose taskbar has no numbers: a red dot over
+//! the taskbar button. A count of none or fewer shows nothing.
+//!
+//! Only Windows ships, so a build for another system -- a developer's --
+//! shows nothing.
 
 use tauri::{Runtime, WebviewWindow};
 
+#[cfg_attr(not(windows), allow(unused_variables))]
 pub fn show<R: Runtime>(window: &WebviewWindow<R>, count: i64) {
-    #[cfg(not(windows))]
-    {
-        let _ = window.set_badge_count((count > 0).then_some(count));
-    }
     #[cfg(windows)]
     {
         let dot = (count > 0).then(|| tauri::image::Image::new_owned(dot_pixels(), DOT, DOT));

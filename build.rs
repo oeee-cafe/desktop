@@ -10,16 +10,17 @@ fn main() {
 /// Steam's library, where the binary looks for it: beside itself. The app
 /// links it dynamically and does not start without it -- even when Steam is
 /// not running, which the app itself takes in its stride -- so `cargo run` and
-/// `cargo test` need it in `target/<profile>/` just as a bundle does. Bundles
-/// get it from `tauri.conf.json` (Linux) and the depot (Windows).
+/// `cargo test` need it in `target/<profile>/`, as Steam's depot has it
+/// beside the `.exe` (README.md).
+///
+/// Only Windows ships. A macOS build is a developer's, run by cargo, which
+/// finds the `steamworks` crate's own copy of the library where it built it.
 fn steam_api_beside_the_binary() {
-    let target = std::env::var("TARGET").unwrap();
-    let (dir, file) = if target.contains("windows") {
-        ("win64", "steam_api64.dll")
-    } else {
-        ("linux64", "libsteam_api.so")
-    };
-    let source = Path::new("steam/redistributable").join(dir).join(file);
+    if !std::env::var("TARGET").unwrap().contains("windows") {
+        return;
+    }
+    let file = "steam_api64.dll";
+    let source = Path::new("steam/redistributable/win64").join(file);
     println!("cargo:rerun-if-changed={}", source.display());
 
     // OUT_DIR is target/<profile>/build/<crate>-<hash>/out.

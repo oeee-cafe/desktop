@@ -15,8 +15,8 @@ use crate::{downloads, site, WINDOW};
 /// Whether a navigation stays in the app's window.
 fn stays_in_app(url: &Url, site: &Url) -> bool {
     match url.scheme() {
-        // The bundled loader: tauri://localhost on Linux,
-        // http://tauri.localhost on Windows.
+        // The bundled loader: http://tauri.localhost on Windows, and
+        // tauri://localhost in a developer's build on macOS.
         "tauri" | "about" | "data" | "blob" => true,
         "http" | "https" if url.host_str() == Some("tauri.localhost") => true,
         "http" | "https" => site::is_site(url, site),
