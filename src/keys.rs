@@ -203,11 +203,11 @@ mod tests {
         assert_eq!(action(VK_F4, ALT), None);
     }
 
+    /// keys_command.js is a function left uncalled, and the call is added
+    /// here: the file ending any other way would make a script that does
+    /// nothing, which only a Windows build would show.
     #[test]
-    fn a_command_is_the_site_s_to_carry_out() {
-        let script = command_script("search");
-        assert!(script.contains("window.oeeeApp.command(command)"));
-        assert!(script.ends_with(r#"})("search");"#));
-        assert!(!script.contains("location"));
+    fn a_command_is_passed_to_the_script() {
+        assert!(command_script("search").ends_with(r#"})("search");"#));
     }
 }

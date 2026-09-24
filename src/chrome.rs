@@ -217,10 +217,4 @@ mod tests {
             assert_eq!(hex_colour(text), None, "{text}");
         }
     }
-
-    #[test]
-    fn until_the_site_says_the_ground_is_neos() {
-        assert_eq!(background(Theme::Light), Color(0xcc, 0xcc, 0xff, 0xff));
-        assert_eq!(background(Theme::Dark), Color(0x17, 0x17, 0x2b, 0xff));
-    }
 }

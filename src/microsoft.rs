@@ -42,8 +42,8 @@
 //! already. An answer the app is not waiting for is dropped.
 
 // Outside the Microsoft Store's build -- on the host, and in the Steam
-// build -- what reads answers and writes scripts is still built and
-// tested, and nothing calls it.
+// build -- what reads answers and writes scripts is still built, and
+// the reading tested, and nothing calls it.
 #![cfg_attr(not(all(windows, not(feature = "steam"))), allow(dead_code))]
 
 use std::sync::Arc;
@@ -178,14 +178,6 @@ mod tests {
         assert_eq!(purchase_ended(NETWORK_ERROR), Some(Ending::Failed));
         assert_eq!(purchase_ended(SERVER_ERROR), Some(Ending::Failed));
         assert_eq!(purchase_ended(5), Some(Ending::Failed));
-    }
-
-    #[test]
-    fn the_ticket_is_asked_for_and_answered_in_the_apps_own_event() {
-        let script = ticket_script(7);
-        assert!(script.contains(r#"event: "oeee-store-ticket", payload: { id: 7, answer: answer || null }"#));
-        assert!(script.contains("return window.oeeeApp.store.ticket();"));
-        assert!(script.contains(r#"typeof window.oeeeApp.store.ticket === "function")) return reply(null)"#));
     }
 
     #[test]

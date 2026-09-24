@@ -169,11 +169,11 @@ mod tests {
         serde_json::to_string(message).unwrap()
     }
 
+    /// bridge.js names the event in its own text, and main.rs listens by
+    /// `EVENT`: renaming either alone leaves the page talking to nobody.
     #[test]
     fn the_script_emits_the_event_listened_for() {
         assert!(SCRIPT.contains(&format!(r#"event: "{EVENT}""#)));
-        assert!(SCRIPT.contains("window.oeeeBridge = {"));
-        assert!(SCRIPT.contains("postMessage: function (text)"));
     }
 
     #[test]

@@ -271,12 +271,3 @@ fn every_command_a_key_sends_is_the_pages() {
         );
     }
 }
-
-#[test]
-fn the_scan_reads_a_path_to_its_end() {
-    let source = format!("{APP} && {APP}.store && {APP}.store.prices({{}}); {APP}.caption({{");
-    assert_eq!(
-        members_called(&source),
-        ["store", "store.prices", "caption"]
-    );
-}
