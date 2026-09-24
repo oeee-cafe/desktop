@@ -14,6 +14,18 @@
 //! pressed (`oeeeApp.caption`), and
 //! maximises or restores the window on a click, the way the system's own
 //! button does.
+//!
+//! It goes with each document the window leaves. A page of the site says
+//! where its button is as it loads, but nothing says when the button has
+//! gone: the loader, where offline.rs sends a page the site did not answer
+//! for, draws caption buttons of its own in the same corner and says
+//! nothing, and neither does a page of the site without the toolbar. So
+//! the stand-in is taken away when a new document starts (WebView2's
+//! `ContentLoading`), which is before any of that document's scripts run,
+//! and a page that has a button puts it back. A navigation that is refused
+//! or cancelled -- a link handed to the browser, a Stay -- starts no
+//! document and leaves it where it is, and so does htmx's swap of a page,
+//! which is the same document.
 
 use std::cell::Cell;
 use std::sync::atomic::{AtomicIsize, Ordering};
@@ -22,6 +34,7 @@ use std::sync::OnceLock;
 use crate::bridge::Place;
 
 use tauri::WebviewWindow;
+use webview2_com::ContentLoadingEventHandler;
 use windows::core::w;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -49,9 +62,22 @@ thread_local! {
 }
 
 /// Makes the stand-in, hidden until the page says where its button is
-/// (`place`).
+/// (`place`), and hidden again whenever the window starts on another
+/// document.
 pub fn attach(window: &WebviewWindow) -> tauri::Result<()> {
-    make_stand_in(window)
+    make_stand_in(window)?;
+    window.with_webview(|webview| unsafe {
+        let Ok(core) = webview.controller().CoreWebView2() else {
+            return;
+        };
+        // On the window's thread, as `place` has to be.
+        let handler = ContentLoadingEventHandler::create(Box::new(|_, _| {
+            place(None);
+            Ok(())
+        }));
+        let mut token = Default::default();
+        let _ = core.add_ContentLoading(&handler, &mut token);
+    })
 }
 
 fn make_stand_in(window: &WebviewWindow) -> tauri::Result<()> {
