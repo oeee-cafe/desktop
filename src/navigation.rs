@@ -2,15 +2,14 @@
 //!
 //! The site and the bundled loader stay in the app's window; anything else is
 //! a link off the site, and goes to the browser the player already uses,
-//! where it has their sign-ins and an address bar. A replay file goes
-//! nowhere (downloads.rs).
+//! where it has their sign-ins and an address bar.
 
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
-use crate::{downloads, site, WINDOW};
+use crate::{site, WINDOW};
 
 /// Whether a navigation stays in the app's window.
 fn stays_in_app(url: &Url, site: &Url) -> bool {
@@ -43,11 +42,6 @@ pub fn prepare<'a, M: Manager<tauri::Wry>>(
     builder
         .on_navigation(move |url| {
             let (app, site) = &navigation;
-            // Not in the window and not in the browser, which would
-            // download it.
-            if downloads::is_replay(url) {
-                return false;
-            }
             if stays_in_app(url, site) {
                 return true;
             }
@@ -59,9 +53,6 @@ pub fn prepare<'a, M: Manager<tauri::Wry>>(
         // the site replaces the current one instead.
         .on_new_window(move |url, _features| {
             let (app, site) = &new_window;
-            if downloads::is_replay(&url) {
-                return NewWindowResponse::Deny;
-            }
             if stays_in_app(&url, site) {
                 if let Some(window) = app.get_webview_window(WINDOW) {
                     let _ = window.navigate(url);

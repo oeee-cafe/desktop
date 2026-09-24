@@ -151,8 +151,7 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
         .min_inner_size(800.0, 600.0)
         // Edge's address and contact suggestions over form fields.
         .general_autofill_enabled(false)
-        // Saved where the player says, and never a replay file
-        // (downloads.rs).
+        // Saved where the player says (downloads.rs).
         .on_download(|webview, event| downloads::handle(&webview, event));
     let builder = chrome::prepare(builder).initialization_script(bridge::SCRIPT);
     let builder = steam::prepare(builder, steam, site);

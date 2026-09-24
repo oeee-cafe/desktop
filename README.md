@@ -19,8 +19,7 @@ site, so what it shows is always what is deployed.
   drawing) is asked about before the window closes, and the player can stay;
   only the Leave button leaves, not Esc or the dialog's close box.
 - A download is saved where the player says, in the system's Save dialog
-  (`src/downloads.rs`). A `.pch` replay is never handed over: not as a
-  download, and not as a link for the browser to download.
+  (`src/downloads.rs`).
 - The browser shows through as little as it can: no right-click menu except
   on text fields, selections and images; on Windows, no browser find bar,
   print preview, autofill suggestions or offer to save a password
