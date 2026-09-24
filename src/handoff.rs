@@ -26,17 +26,17 @@ use crate::{site, WINDOW};
 /// Opens the browser where the page asks, once it has a handoff to carry
 /// (`browse` on the bridge), or tells the page it could not.
 ///
-/// Only at the site's own URLs: the page is the site's, but the window is the
+/// Only where [`may_open`] says: the page is the site's, but the window is the
 /// app's, and a page is not given the run of whatever the browser will open.
 pub fn browse(app: &AppHandle, site: &Url, url: &str) {
     let opened = match Url::parse(url) {
-        Ok(url) if site::is_site(&url, site) => app
+        Ok(url) if may_open(&url, site) => app
             .opener()
             .open_url(url.as_str(), None::<&str>)
             .map_err(|error| eprintln!("could not open the sign-in in the browser: {error}"))
             .is_ok(),
         _ => {
-            eprintln!("a page asked for a browser somewhere that is not the site: {url}");
+            eprintln!("a page asked for a browser somewhere it may not open: {url}");
             false
         }
     };
@@ -45,6 +45,27 @@ pub fn browse(app: &AppHandle, site: &Url, url: &str) {
             let _ = window.eval("window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.unopened();");
         }
     }
+}
+
+/// Google's sign-in page, which the site sends a Google sign-in straight to
+/// (`handoff::AtProvider` in oeee-cafe/web) rather than through its own page
+/// first, saving the browser the stop.
+const GOOGLE_SIGN_IN: (&str, &str) = ("accounts.google.com", "/o/oauth2/v2/auth");
+
+/// Whether the browser may be opened at `url`: the site's own pages, or
+/// Google's sign-in page over https -- by that path exactly, and with nobody's
+/// name or password in front of the host.
+fn may_open(url: &Url, site: &Url) -> bool {
+    if site::is_site(url, site) {
+        return true;
+    }
+    let (host, path) = GOOGLE_SIGN_IN;
+    url.scheme() == "https"
+        && url.host_str() == Some(host)
+        && url.port().is_none()
+        && url.path() == path
+        && url.username().is_empty()
+        && url.password().is_none()
 }
 
 /// The window coming back to the front is somebody returning from the
@@ -111,4 +132,32 @@ pub fn returned(app: &AppHandle) {
     let _ = window.show();
     let _ = window.set_focus();
     ask_now(&window);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn opens(value: &str) -> bool {
+        may_open(&Url::parse(value).unwrap(), &site::for_tests())
+    }
+
+    #[test]
+    fn opens_the_site_and_googles_sign_in_page() {
+        assert!(opens("https://oeee.cafe/auth/apple?handoff=I"));
+        assert!(opens(
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=C&state=S&nonce=N"
+        ));
+    }
+
+    #[test]
+    fn opens_nothing_else_of_google_or_anyone() {
+        assert!(!opens("http://accounts.google.com/o/oauth2/v2/auth?state=S"));
+        assert!(!opens("https://accounts.google.com/signin/v2/identifier"));
+        assert!(!opens("https://accounts.google.com:8443/o/oauth2/v2/auth"));
+        assert!(!opens("https://someone:secret@accounts.google.com/o/oauth2/v2/auth"));
+        assert!(!opens("https://accounts.google.com.example/o/oauth2/v2/auth"));
+        assert!(!opens("https://example.com/"));
+        assert!(!opens("file:///C:/Windows/System32/calc.exe"));
+    }
 }
