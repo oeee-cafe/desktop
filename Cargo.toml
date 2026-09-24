@@ -25,7 +25,8 @@ tauri-plugin-opener = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-single-instance = "2"
 # Coming back from a sign-in done in the browser: the site sends it to
-# oeee-cafe://handoff/done, which brings this window forward (handoff.rs).
+# oeee-cafe://handoff/done, which Steam's build registers with Windows
+# through this (handoff.rs). The URL itself arrives as a second launch.
 tauri-plugin-deep-link = "2"
 url = "2"
 steamworks = { version = "0.13.1", optional = true, features = ["raw-bindings"] }

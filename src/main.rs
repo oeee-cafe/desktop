@@ -161,7 +161,6 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
     // Store's package; everywhere else there is none.
     let microsoft = microsoft::start(&window);
     listen_to_the_site(app, &window, site, steam.clone(), microsoft.clone());
-    handoff::listen_for_return(app.handle());
     steam::watch_dlc(app.handle(), steam);
     chrome::paint_background(&window);
 
@@ -172,6 +171,7 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
         keys::attach(&window)?;
         offline::attach(&window, site, &loader)?;
         snap::attach(&window)?;
+        handoff::register_return(app.handle());
     }
     Ok(())
 }
@@ -186,8 +186,8 @@ fn main() {
         // exits, and the window already open comes forward.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Opening oeee-cafe://... while the app is running is a second
-            // launch carrying it, on the platforms where a scheme is handed
-            // over that way, so this is also how a sign-in comes back.
+            // launch carrying it on Windows, so this is also how a sign-in
+            // comes back (handoff.rs).
             handoff::returned(app);
         }))
         // Where the window was, how big, and whether it was maximised or full

@@ -92,34 +92,35 @@ fn ask_now<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
 /// the window. It carries nothing -- the window is already holding the id
 /// and the secret that claim the sign-in -- so an app that took the scheme
 /// for itself would learn nothing by it.
+#[cfg(windows)]
 pub const RETURN_SCHEME: &str = "oeee-cafe";
 
-/// Hears the browser knock while the app is already running.
+/// Tells Windows the app answers [`RETURN_SCHEME`].
 ///
-/// Where a scheme arrives as a second launch instead, single-instance hands
-/// it over and calls [`returned`] the same way (main.rs); both are wired
-/// because which one happens is the platform's business, not ours.
-pub fn listen_for_return(app: &AppHandle) {
+/// The knock itself comes back as a second launch carrying the URL, which
+/// single-instance hands to the window already open and which calls
+/// [`returned`] (main.rs). Nothing listens on the deep-link plugin: it only
+/// hears a URL at its own start, before anything could be listening, or when
+/// single-instance forwards one, which it does only with its `deep-link`
+/// feature, not enabled here. On macOS the system would deliver the URL to
+/// the running app instead, but only to a bundled one declaring the scheme,
+/// and the developer's build there is neither.
+///
+/// The two Windows builds want the scheme registered differently. Steam
+/// ships loose files into a depot folder and installs no package, so there
+/// is nothing to declare it for us and this is what registers it. The Store
+/// build is an MSIX, which takes its protocols from its manifest and only
+/// from there (msstore/AppxManifest.xml); inside the package this registry
+/// write is virtualised and does nothing, which is harmless.
+///
+/// A failure is not worth stopping for either way: all it costs is the
+/// knock, and the page still asks the site every couple of seconds.
+#[cfg(windows)]
+pub fn register_return(app: &AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
-    // Windows wants the scheme registered with the system, and the two
-    // Windows builds want it registered differently.
-    //
-    // Steam ships loose files into a depot folder and installs no package, so
-    // there is nothing to declare it for us and this is what registers it.
-    // The Store build is an MSIX, which takes its protocols from its manifest
-    // and only from there (msstore/AppxManifest.xml); inside the package this
-    // registry write is virtualised and does nothing, which is harmless.
-    //
-    // A failure is not worth stopping for either way: all it costs is the
-    // knock, and the page still asks the site every couple of seconds.
-    #[cfg(windows)]
     if let Err(error) = app.deep_link().register(RETURN_SCHEME) {
         eprintln!("could not register {RETURN_SCHEME}://: {error}");
     }
-    let app = app.clone();
-    app.clone().deep_link().on_open_url(move |_event| {
-        returned(&app);
-    });
 }
 
 /// Brings the window forward when the browser knocks, and asks the site at
