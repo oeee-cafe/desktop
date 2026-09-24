@@ -234,6 +234,15 @@ pub fn answer_sign_in(app: &AppHandle, steam: Option<Arc<Steam>>) {
 /// Opens the overlay on a DLC's store page, where the player buys it; what
 /// comes of that arrives by `watch_dlc`. The page names the DLC by its app
 /// id, and anything else is the page's mistake, said and left.
+///
+/// Nothing tells the page a press ended without a purchase
+/// (`oeeeApp.store.ended`), as the Microsoft Store's build does. The only
+/// sign would be the overlay closing (`GameOverlayActivated_t`), which is
+/// the same for any use of the overlay, is not sent at all where the player
+/// has turned the overlay off, and is not ordered against `DlcInstalled_t`
+/// -- so it cannot tell a press given up from a purchase not yet arrived,
+/// and saying "cancelled" over a purchase would be worse than saying
+/// nothing.
 pub fn open_store(steam: &Steam, product: &str) {
     match product.parse::<u32>() {
         Ok(app_id) => steam.show_store(app_id),

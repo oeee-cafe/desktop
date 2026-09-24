@@ -23,8 +23,18 @@ use windows::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName;
 use windows::Win32::UI::Shell::IInitializeWithWindow;
 use windows_collections::IIterable;
 
-use super::{ticket_reply, ticket_script, Ticket, TICKET_EVENT, TICKET_TIMEOUT};
-use crate::{store, WINDOW};
+use super::{purchase_ended, ticket_reply, ticket_script, Ticket, TICKET_EVENT, TICKET_TIMEOUT};
+use crate::store::{self, Ending};
+use crate::WINDOW;
+
+// `purchase_ended` reads the Store's statuses by their values.
+const _: () = {
+    assert!(StorePurchaseStatus::Succeeded.0 == super::SUCCEEDED);
+    assert!(StorePurchaseStatus::AlreadyPurchased.0 == super::ALREADY_PURCHASED);
+    assert!(StorePurchaseStatus::NotPurchased.0 == super::NOT_PURCHASED);
+    assert!(StorePurchaseStatus::NetworkError.0 == super::NETWORK_ERROR);
+    assert!(StorePurchaseStatus::ServerError.0 == super::SERVER_ERROR);
+};
 
 /// The product kind the Supporter Pack is in Partner Center: a durable
 /// add-on, bought once and kept.
@@ -136,19 +146,36 @@ impl Microsoft {
     }
 
     /// Sells an add-on in the Store's own dialog, and hands the page proof
-    /// once the player owns it. A player who closes the dialog has bought
-    /// nothing, and nothing is said; anything that goes wrong is logged,
-    /// and the site's own recheck is left to find what was bought.
+    /// once the player owns it. A press that ends without the add-on is told
+    /// to the page as the way it ended (`purchase_ended`): the player closing
+    /// the dialog, or the Store failing to sell -- which includes the dialog
+    /// never opening. Once the add-on is owned it has been bought, so a
+    /// failure to prove it is only logged, and the site's own recheck is left
+    /// to find it.
     pub fn sell(self: &Arc<Self>, product: String) {
         let this = self.clone();
         std::thread::spawn(move || {
-            if let Err(error) = this.buy(&product) {
-                eprintln!("could not sell {product:?} through the Microsoft Store: {error}");
+            let (context, status) = match this.purchase(&product) {
+                Ok(answered) => answered,
+                Err(error) => {
+                    eprintln!("could not sell {product:?} through the Microsoft Store: {error}");
+                    this.eval(store::ended_script(Ending::Failed));
+                    return;
+                }
+            };
+            if let Some(ending) = purchase_ended(status) {
+                this.eval(store::ended_script(ending));
+                return;
+            }
+            if let Err(error) = this.prove(&context, &product) {
+                eprintln!("{product:?} is bought, but could not be proven to the site: {error}");
             }
         });
     }
 
-    fn buy(&self, product: &str) -> Result<(), String> {
+    /// Shows the Store's purchase dialog and waits for it, answering with
+    /// the Store it was shown in and the `StorePurchaseStatus` it ended with.
+    fn purchase(&self, product: &str) -> Result<(StoreContext, i32), String> {
         let context = self.context().map_err(|e| e.to_string())?;
 
         // Started on the window's thread, where a dialog belongs, and waited
@@ -167,15 +194,21 @@ impl Microsoft {
             .map_err(|e| e.to_string())?;
         let result = purchase.get().map_err(|e| e.to_string())?;
         let status = result.Status().map_err(|e| e.to_string())?;
-        match status {
-            StorePurchaseStatus::Succeeded | StorePurchaseStatus::AlreadyPurchased => {}
-            StorePurchaseStatus::NotPurchased => return Ok(()),
-            other => {
-                let error = result.ExtendedError().map(|e| e.message()).unwrap_or_default();
-                return Err(format!("the Store said {} ({error})", other.0));
-            }
+        if !matches!(
+            status,
+            StorePurchaseStatus::Succeeded
+                | StorePurchaseStatus::AlreadyPurchased
+                | StorePurchaseStatus::NotPurchased
+        ) {
+            let error = result.ExtendedError().map(|e| e.message()).unwrap_or_default();
+            eprintln!("the Store could not sell {product:?}: it said {} ({error})", status.0);
         }
+        Ok((context, status.0))
+    }
 
+    /// Hands the page a Microsoft Store ID key for what the player owns, made
+    /// from a ticket the page gets from the site.
+    fn prove(&self, context: &StoreContext, product: &str) -> Result<(), String> {
         let Some(Ticket { ticket, user }) = self.ticket()? else {
             eprintln!("{product:?} is bought, but the page gave no ticket to prove it with");
             return Ok(());

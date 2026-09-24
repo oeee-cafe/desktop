@@ -11,11 +11,14 @@
 //! The page names each add-on by its Store ID (Partner Center, the add-on's
 //! Product identity). `prices` is answered with each one's price as the Store
 //! formats it for the player. `purchase` shows the Store's own purchase
-//! dialog over the window; once the player owns the add-on -- just now, or
-//! already -- the app hands the page proof of it, and the proof is where the
-//! site has to take part. The Store says who owns what only to a server that
-//! can name the customer, by a Microsoft Store ID key, and a key is made on
-//! the player's machine from a ticket the site's server made:
+//! dialog over the window. A press that ends without the add-on -- the
+//! dialog closed, or the Store failing -- is told to the page as
+//! `oeeeApp.store.ended` (`purchase_ended`). Once the player owns the
+//! add-on -- just now, or already -- the app hands the page proof of it,
+//! and the proof is where the site has to take part. The Store says who
+//! owns what only to a server that can name the customer, by a Microsoft
+//! Store ID key, and a key is made on the player's machine from a ticket
+//! the site's server made:
 //!
 //!   1. the app asks the page for `oeeeApp.store.ticket()`, which asks the
 //!      site and resolves to `{ticket, user}` -- an Azure AD access token for
@@ -48,7 +51,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::store::quoted;
+use crate::store::{quoted, Ending};
 
 #[cfg(all(windows, not(feature = "steam")))]
 mod client;
@@ -80,6 +83,28 @@ pub fn start(_window: &tauri::WebviewWindow) -> Option<Arc<Microsoft>> {
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn store(microsoft: &Option<Arc<Microsoft>>) -> Option<&'static str> {
     microsoft.as_ref().map(|_| "microsoft")
+}
+
+/// `StorePurchaseStatus`, which the Store answers a purchase with, by its
+/// values (client.rs holds them to the Store's own).
+const SUCCEEDED: i32 = 0;
+const ALREADY_PURCHASED: i32 = 1;
+const NOT_PURCHASED: i32 = 2;
+const NETWORK_ERROR: i32 = 3;
+const SERVER_ERROR: i32 = 4;
+
+/// How a purchase the Store answered with `status` ends for the page: none
+/// when the player owns the add-on -- bought just now, or already -- and
+/// proof follows; otherwise how the press ended. The player closing the
+/// dialog is `NotPurchased`; the Store not reaching its service, or its
+/// service failing, is a failure, as is a status the Store adds later.
+fn purchase_ended(status: i32) -> Option<Ending> {
+    match status {
+        SUCCEEDED | ALREADY_PURCHASED => None,
+        NOT_PURCHASED => Some(Ending::Cancelled),
+        NETWORK_ERROR | SERVER_ERROR => Some(Ending::Failed),
+        _ => Some(Ending::Failed),
+    }
 }
 
 /// The event `ticket_script` answers in.
@@ -144,6 +169,16 @@ fn ticket_reply(payload: &str) -> Option<(u64, Option<Ticket>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn owning_the_add_on_goes_on_to_proof_and_anything_else_ends_the_press() {
+        assert_eq!(purchase_ended(SUCCEEDED), None);
+        assert_eq!(purchase_ended(ALREADY_PURCHASED), None);
+        assert_eq!(purchase_ended(NOT_PURCHASED), Some(Ending::Cancelled));
+        assert_eq!(purchase_ended(NETWORK_ERROR), Some(Ending::Failed));
+        assert_eq!(purchase_ended(SERVER_ERROR), Some(Ending::Failed));
+        assert_eq!(purchase_ended(5), Some(Ending::Failed));
+    }
 
     #[test]
     fn the_ticket_is_asked_for_and_answered_in_the_apps_own_event() {

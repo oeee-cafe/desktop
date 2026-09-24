@@ -240,6 +240,7 @@ fn every_member_the_app_calls_is_the_pages() {
         "signIn.unopened",
         "store.prices",
         "store.purchased",
+        "store.ended",
         "store.ticket",
     ] {
         assert!(called.contains(member), "found no call of {member}");
