@@ -26,13 +26,9 @@ pub fn is_site(page: &Url, site: &Url) -> bool {
 }
 
 /// The address pattern a capability gives the site's pages by (main.rs):
-/// the site and nothing else.
+/// the site and nothing else -- its origin, as [`is_site`] compares it.
 pub fn pattern(site: &Url) -> String {
-    let host = site.host_str().unwrap_or_default();
-    match site.port() {
-        Some(port) => format!("{}://{}:{}/*", site.scheme(), host, port),
-        None => format!("{}://{}/*", site.scheme(), host),
-    }
+    format!("{}/*", site.origin().ascii_serialization())
 }
 
 #[cfg(test)]
