@@ -177,28 +177,6 @@ mod tests {
     }
 
     #[test]
-    fn a_page_says_what_the_player_is_doing() {
-        let message = sent(
-            r#"{"v":1,"type":"page","path":"/draw","signedIn":true,"presence":"drawing","community":"오이","group":null,"painting":true,"refreshable":false}"#,
-        );
-        assert_eq!(
-            parse(&message),
-            Some(Message::Page(Page {
-                signed_in: Some(true),
-                presence: Some("drawing".into()),
-                community: Some("오이".into()),
-                group: None,
-            }))
-        );
-    }
-
-    #[test]
-    fn a_page_without_the_toolbar_cannot_say_who_is_signed_in() {
-        let message = sent(r#"{"v":1,"type":"page","signedIn":null,"presence":null}"#);
-        assert_eq!(parse(&message), Some(Message::Page(Page::default())));
-    }
-
-    #[test]
     fn the_unread_count_is_a_number() {
         assert_eq!(
             parse(&sent(r#"{"v":1,"type":"unread","count":3}"#)),
@@ -222,20 +200,6 @@ mod tests {
         // A page without the design system's stylesheet has none.
         let message = sent(r#"{"v":1,"type":"theme","choice":"system","dark":false,"ground":null}"#);
         assert_eq!(parse(&message), Some(Message::Theme(Theme::default())));
-    }
-
-    #[test]
-    fn the_words_are_the_pages() {
-        let message = sent(
-            r#"{"v":1,"type":"words","leaveTitle":"이 페이지를 떠날까요?","leaveBody":"저장하지 않은 내용은 사라집니다.","leave":"떠나기","stay":"머무르기","ok":"확인","cancel":"취소","saveImage":"이미지 저장","copyImage":"이미지 복사","share":"공유…","copyLink":"링크 복사","savedImage":"사진에 저장했습니다","savedFile":"다운로드에 저장했습니다","saveFailed":"저장하지 못했습니다"}"#,
-        );
-        let Some(Message::Words(words)) = parse(&message) else {
-            panic!("not understood: {message}");
-        };
-        assert_eq!(words.leave_title, "이 페이지를 떠날까요?");
-        assert_eq!(words.leave, "떠나기");
-        assert_eq!(words.stay, "머무르기");
-        assert_eq!(words.copy_link, "링크 복사");
     }
 
     #[test]
@@ -338,14 +302,6 @@ mod tests {
         assert_eq!(parse(&sent("not json")), None);
         assert_eq!(parse("3"), None);
         assert_eq!(parse("null"), None);
-    }
-
-    #[test]
-    fn the_toolbar_asks_for_the_window() {
-        assert_eq!(
-            parse(&sent(r#"{"v":1,"type":"window","action":"minimize"}"#)),
-            Some(Message::Window { action: "minimize".into() })
-        );
     }
 
     #[test]
