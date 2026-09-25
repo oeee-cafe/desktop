@@ -80,7 +80,8 @@ $template = $template.Replace('$PUBLISHER$', [Security.SecurityElement]::Escape(
 $template = $template.Replace('$PUBLISHER_DISPLAY_NAME$', [Security.SecurityElement]::Escape($publisherDisplayName))
 $template = $template.Replace('$VERSION$', $packageVersion)
 
-# The index Windows picks each image's variant from (assets.sh names them).
+# The index Windows picks each image's variant from (assets.sh names them),
+# and the app's name in each language (Strings/).
 $priconfig = Join-Path $out 'priconfig.xml'
 New-Item $out -ItemType Directory -Force | Out-Null
 Run $makepri 'createconfig' '/cf' $priconfig '/dq' 'en-US' '/pv' '10.0.0' '/o'
@@ -110,16 +111,20 @@ foreach ($arch in $Architectures) {
     Pop-Location
   }
 
-  # What goes in the package: the program, its images and its manifest.
+  # What goes in the package: the program, its images, its names and its
+  # manifest.
   $layout = Join-Path $out "layout-$arch"
   if (Test-Path $layout) { Remove-Item $layout -Recurse -Force }
   New-Item $layout -ItemType Directory | Out-Null
   Copy-Item (Join-Path $root "target\$triple\release\oeee-cafe-desktop.exe") $layout
   Copy-Item (Join-Path $PSScriptRoot 'Assets') $layout -Recurse
+  Copy-Item (Join-Path $PSScriptRoot 'Strings') $layout -Recurse
 
   $manifest = $template.Replace('$ARCHITECTURE$', $arch)
   [IO.File]::WriteAllText((Join-Path $layout 'AppxManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))
   Run $makepri 'new' '/pr' $layout '/cf' $priconfig '/mn' (Join-Path $layout 'AppxManifest.xml') '/of' (Join-Path $layout 'resources.pri') '/o'
+  # The names are in the index now, and the package needs no other copy.
+  Remove-Item (Join-Path $layout 'Strings') -Recurse -Force
 
   Run $makeappx 'pack' '/d' $layout '/p' (Join-Path $packages "OeeeCafe_${packageVersion}_$arch.msix") '/o'
 }
