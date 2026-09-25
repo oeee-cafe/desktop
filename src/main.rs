@@ -204,7 +204,15 @@ fn main() {
                 .build(),
         )
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_opener::init())
+        // Without its script, which takes every `target="_blank"` link's
+        // click and asks the plugin from the page, which the site may not:
+        // the link was cancelled and went nowhere. The window hands links
+        // off itself (navigation.rs).
+        .plugin(
+            tauri_plugin_opener::Builder::new()
+                .open_js_links_on_click(false)
+                .build(),
+        )
         .setup(move |app| Ok(setup(app, &site, &steam)?))
         .on_window_event(|window, event| {
             chrome::on_window_event(window, event);
