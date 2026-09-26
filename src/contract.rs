@@ -95,8 +95,10 @@ fn expected(kind: &str, m: &Value) -> Option<Message> {
 }
 
 /// The types the page sends that are some other app's to act on.
-const NOT_OURS: [&str; 6] = [
+const NOT_OURS: [&str; 7] = [
     "haptic", "pressed", "painter", "restore", "share", "download",
+    // The Mac app's saved passwords; Windows fills nothing.
+    "password",
 ];
 
 #[test]

@@ -8,8 +8,8 @@
 //! keyboard's own Back, Forward and Refresh keys, and Ctrl+W to close the
 //! window, which asks first over a drawing as the close button does.
 //!
-//! Ctrl+F is the site's search rather than a find bar, and the rest are the
-//! site's sections by number.
+//! Ctrl+F is the site's search rather than a find bar, Ctrl+K its quick
+//! switcher, and the rest are the site's sections by number.
 
 /// What a key does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,6 +63,7 @@ pub fn action(key: u32, held: Modifiers) -> Option<Action> {
             (VK_F5, _) | (_, Some('R')) => Some(Action::Reload),
             (VK_F4, _) | (_, Some('W')) => Some(Action::Close),
             (_, Some('F')) => Some(Action::Command("search")),
+            (_, Some('K')) => Some(Action::Command("jump")),
             (_, Some('N')) => Some(Action::Command("new-drawing")),
             (VK_OEM_COMMA, _) => Some(Action::Command("account")),
             (VK_OEM_2, _) => Some(Action::Command("shortcuts")),
@@ -179,6 +180,7 @@ mod tests {
     #[test]
     fn the_sites_commands() {
         assert_eq!(action('F' as u32, CTRL), Some(Action::Command("search")));
+        assert_eq!(action('K' as u32, CTRL), Some(Action::Command("jump")));
         assert_eq!(
             action('N' as u32, CTRL),
             Some(Action::Command("new-drawing"))
