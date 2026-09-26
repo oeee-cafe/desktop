@@ -45,7 +45,8 @@ site, so what it shows is always what is deployed.
   own, and minimise, maximise and close are drawn at the toolbar's end by
   the site (`app_caption.jinja` in oeee-cafe/web), which asks for the
   window on the bridge (`src/chrome.rs`), with Snap Layouts on maximise
-  (`src/snap.rs`).
+  (`src/snap.rs`). The window still takes the page's title, which is what
+  the taskbar and Alt+Tab show.
 
 There is no macOS build: on the Mac, Oeee Cafe is the
 [iOS app](https://github.com/oeee-cafe/ios) as a universal app.

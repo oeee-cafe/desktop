@@ -155,7 +155,14 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
         // Edge's address and contact suggestions over form fields.
         .general_autofill_enabled(false)
         // Saved where the player says (downloads.rs).
-        .on_download(|webview, event| downloads::handle(&webview, event));
+        .on_download(|webview, event| downloads::handle(&webview, event))
+        // The page's title as the window's, which is what the taskbar,
+        // Alt+Tab and Task View name it by: "Oeee Cafe" alone told a player
+        // nothing of which drawing or whose page was open.
+        .on_document_title_changed(|window, title| {
+            let title = title.trim();
+            let _ = window.set_title(if title.is_empty() { "Oeee Cafe" } else { title });
+        });
     let builder = chrome::prepare(builder).initialization_script(bridge::SCRIPT);
     let builder = steam::prepare(builder, steam, site);
     let window = navigation::prepare(builder, app.handle(), site).build()?;
