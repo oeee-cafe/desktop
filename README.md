@@ -38,7 +38,9 @@ site, so what it shows is always what is deployed.
   Refresh keys, and Ctrl+W, which asks over a drawing as the close button
   does. Ctrl+F is the site's search, Ctrl+N a new drawing, Ctrl+, the
   account page, Ctrl+1 to Ctrl+5 the site's sections and Ctrl+/ its list of
-  shortcuts.
+  shortcuts. F11 is full screen, and Ctrl+Plus, Ctrl+Minus and Ctrl+0 make
+  the window bigger, smaller and back, kept from launch to launch
+  (`src/zoom.rs`).
 - On Windows the site's toolbar is the title bar: the window has none of its
   own, and minimise, maximise and close are drawn at the toolbar's end by
   the site (`app_caption.jinja` in oeee-cafe/web), which asks for the

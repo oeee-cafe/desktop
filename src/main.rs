@@ -52,6 +52,9 @@ mod store;
 #[cfg(windows)]
 mod webview2;
 mod words;
+// The keys that change it are WebView2's to hand over (webview2.rs).
+#[cfg_attr(not(windows), allow(dead_code))]
+mod zoom;
 
 /// The app's one window. The loader and `capabilities/default.json` name it
 /// too, and have to agree.
@@ -169,6 +172,7 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
         let store = steam::store(steam).or(microsoft::store(&microsoft));
         webview2::attach(&window, store)?;
         keys::attach(&window)?;
+        zoom::restore(&window);
         offline::attach(&window, site, &loader)?;
         snap::attach(&window)?;
         handoff::register_return(app.handle());

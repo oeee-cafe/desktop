@@ -9,7 +9,12 @@
 //! window, which asks first over a drawing as the close button does.
 //!
 //! Ctrl+F is the site's search rather than a find bar, Ctrl+K its quick
-//! switcher, and the rest are the site's sections by number.
+//! switcher, and the rest are the site's sections by number. F11 is full
+//! screen, and Ctrl with Plus, Minus or 0 the window's size (zoom.rs), as in
+//! any Windows browser; the painter's own canvas zoom is Plus and Minus
+//! without Ctrl, which stay the page's.
+
+use crate::zoom::Step;
 
 /// What a key does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +23,8 @@ pub enum Action {
     Forward,
     Reload,
     Close,
+    FullScreen,
+    Zoom(Step),
     /// One of the site's commands, by the name `window.oeeeApp.command` knows it
     /// by (toolbar.jinja in oeee-cafe/web).
     Command(&'static str),
@@ -34,6 +41,7 @@ pub struct Modifiers {
 // Windows' virtual-key codes, which are what WebView2 reports.
 const VK_F4: u32 = 0x73;
 const VK_F5: u32 = 0x74;
+const VK_F11: u32 = 0x7A;
 const VK_LEFT: u32 = 0x25;
 const VK_RIGHT: u32 = 0x27;
 const VK_BROWSER_BACK: u32 = 0xA6;
@@ -42,6 +50,13 @@ const VK_BROWSER_REFRESH: u32 = 0xA8;
 const VK_OEM_COMMA: u32 = 0xBC;
 /// The `/?` key on US layouts.
 const VK_OEM_2: u32 = 0xBF;
+/// The `=+` key on every layout, and the number pad's Plus and Minus.
+const VK_OEM_PLUS: u32 = 0xBB;
+/// The `-_` key on every layout.
+const VK_OEM_MINUS: u32 = 0xBD;
+const VK_ADD: u32 = 0x6B;
+const VK_SUBTRACT: u32 = 0x6D;
+const VK_NUMPAD0: u32 = 0x60;
 
 /// The action for `key` pressed with `held`, if it is one of the window's.
 pub fn action(key: u32, held: Modifiers) -> Option<Action> {
@@ -50,6 +65,7 @@ pub fn action(key: u32, held: Modifiers) -> Option<Action> {
     match (ctrl, alt, shift) {
         (false, false, false) => match key {
             VK_F5 | VK_BROWSER_REFRESH => Some(Action::Reload),
+            VK_F11 => Some(Action::FullScreen),
             VK_BROWSER_BACK => Some(Action::Back),
             VK_BROWSER_FORWARD => Some(Action::Forward),
             _ => None,
@@ -62,6 +78,9 @@ pub fn action(key: u32, held: Modifiers) -> Option<Action> {
         (true, false, false) => match (key, letter) {
             (VK_F5, _) | (_, Some('R')) => Some(Action::Reload),
             (VK_F4, _) | (_, Some('W')) => Some(Action::Close),
+            (VK_OEM_PLUS | VK_ADD, _) => Some(Action::Zoom(Step::In)),
+            (VK_OEM_MINUS | VK_SUBTRACT, _) => Some(Action::Zoom(Step::Out)),
+            (VK_NUMPAD0, _) | (_, Some('0')) => Some(Action::Zoom(Step::Reset)),
             (_, Some('F')) => Some(Action::Command("search")),
             (_, Some('K')) => Some(Action::Command("jump")),
             (_, Some('N')) => Some(Action::Command("new-drawing")),
@@ -74,9 +93,11 @@ pub fn action(key: u32, held: Modifiers) -> Option<Action> {
             (_, Some('5')) => Some(Action::Command("tags")),
             _ => None,
         },
-        // Ctrl+Shift+R, the hard reload a player's hands may know.
-        (true, false, true) => match letter {
-            Some('R') => Some(Action::Reload),
+        // Ctrl+Shift+R, the hard reload a player's hands may know; and
+        // Ctrl+Shift+=, which is Ctrl and the `+` printed on that key.
+        (true, false, true) => match (key, letter) {
+            (_, Some('R')) => Some(Action::Reload),
+            (VK_OEM_PLUS, _) => Some(Action::Zoom(Step::In)),
             _ => None,
         },
         _ => None,
@@ -113,6 +134,15 @@ fn act(window: &tauri::WebviewWindow, action: Action) {
         Action::Reload => "location.reload();".to_owned(),
         Action::Close => {
             let _ = window.close();
+            return;
+        }
+        Action::FullScreen => {
+            let full = window.is_fullscreen().unwrap_or(false);
+            let _ = window.set_fullscreen(!full);
+            return;
+        }
+        Action::Zoom(step) => {
+            crate::zoom::change(window, step);
             return;
         }
         Action::Command(name) => command_script(name),
@@ -175,6 +205,22 @@ mod tests {
     fn closing() {
         assert_eq!(action('W' as u32, CTRL), Some(Action::Close));
         assert_eq!(action(VK_F4, CTRL), Some(Action::Close));
+    }
+
+    #[test]
+    fn full_screen_and_the_windows_size() {
+        assert_eq!(action(VK_F11, NONE), Some(Action::FullScreen));
+        assert_eq!(action(VK_OEM_PLUS, CTRL), Some(Action::Zoom(Step::In)));
+        assert_eq!(action(VK_OEM_PLUS, CTRL_SHIFT), Some(Action::Zoom(Step::In)));
+        assert_eq!(action(VK_ADD, CTRL), Some(Action::Zoom(Step::In)));
+        assert_eq!(action(VK_OEM_MINUS, CTRL), Some(Action::Zoom(Step::Out)));
+        assert_eq!(action(VK_SUBTRACT, CTRL), Some(Action::Zoom(Step::Out)));
+        assert_eq!(action('0' as u32, CTRL), Some(Action::Zoom(Step::Reset)));
+        assert_eq!(action(VK_NUMPAD0, CTRL), Some(Action::Zoom(Step::Reset)));
+        // The painter's canvas zoom, which is Plus and Minus alone.
+        assert_eq!(action(VK_OEM_PLUS, NONE), None);
+        assert_eq!(action(VK_OEM_MINUS, NONE), None);
+        assert_eq!(action(VK_ADD, NONE), None);
     }
 
     #[test]
