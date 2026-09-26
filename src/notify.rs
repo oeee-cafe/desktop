@@ -1,9 +1,9 @@
 //! A new notification as Windows's own: the `notify` message (bridge.rs).
 //!
 //! The phones and the Mac are sent a push for every notification; Windows is
-//! sent none, so the site hands the app the same words over the bridge when
-//! it hears one live while the window is not the one in front (live.jinja
-//! in oeee-cafe/web). In front, the page shows it itself.
+//! sent none, so the site hands the app the same words over the bridge
+//! whenever it hears one live (live.jinja in oeee-cafe/web), and shows them
+//! as a toast of its own too, as it does in every app.
 //!
 //! Shown as a toast. Pressed, it brings the window forward and goes to the
 //! notification's page the way a link in the page would -- so a page holding

@@ -74,9 +74,8 @@ pub enum Message {
         #[serde(default)]
         place: Option<Place>,
     },
-    /// A new notification for the reader, heard by the page while the window
-    /// was not in front: shown as Windows's own (notify.rs). `url` is a
-    /// path on the site.
+    /// A new notification for the reader, heard live by the page: shown as
+    /// Windows's own (notify.rs). `url` is a path on the site.
     Notify {
         title: String,
         body: String,
