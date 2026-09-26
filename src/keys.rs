@@ -211,7 +211,10 @@ mod tests {
     fn full_screen_and_the_windows_size() {
         assert_eq!(action(VK_F11, NONE), Some(Action::FullScreen));
         assert_eq!(action(VK_OEM_PLUS, CTRL), Some(Action::Zoom(Step::In)));
-        assert_eq!(action(VK_OEM_PLUS, CTRL_SHIFT), Some(Action::Zoom(Step::In)));
+        assert_eq!(
+            action(VK_OEM_PLUS, CTRL_SHIFT),
+            Some(Action::Zoom(Step::In))
+        );
         assert_eq!(action(VK_ADD, CTRL), Some(Action::Zoom(Step::In)));
         assert_eq!(action(VK_OEM_MINUS, CTRL), Some(Action::Zoom(Step::Out)));
         assert_eq!(action(VK_SUBTRACT, CTRL), Some(Action::Zoom(Step::Out)));

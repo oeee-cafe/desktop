@@ -178,10 +178,10 @@ pub fn prepare<'a, M: Manager<tauri::Wry>>(
     };
     let site = site.clone();
     builder.on_page_load(move |_window, payload| {
-            if payload.event() == PageLoadEvent::Finished && !site::is_site(payload.url(), &site) {
-                steam.show_presence(None);
-            }
-        })
+        if payload.event() == PageLoadEvent::Finished && !site::is_site(payload.url(), &site) {
+            steam.show_presence(None);
+        }
+    })
 }
 
 /// A DLC bought while the app is open -- the Supporter Pack, in the overlay
@@ -265,7 +265,10 @@ const PRICES_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 /// the player is.
 fn appdetails_url(app_ids: &[u32], country: &str) -> String {
     let ids: Vec<String> = app_ids.iter().map(u32::to_string).collect();
-    let mut url = format!("{APPDETAILS}?appids={}&filters=price_overview", ids.join(","));
+    let mut url = format!(
+        "{APPDETAILS}?appids={}&filters=price_overview",
+        ids.join(",")
+    );
     if country.len() == 2 && country.chars().all(|c| c.is_ascii_alphabetic()) {
         url.push_str("&cc=");
         url.push_str(country);
@@ -342,13 +345,14 @@ pub fn answer_prices(app: &AppHandle, steam: &Steam, products: Vec<String>) {
     let app = app.clone();
     std::thread::spawn(move || {
         let app_ids: Vec<u32> = asked.iter().map(|(_, app_id)| *app_id).collect();
-        let found = match fetch(&appdetails_url(&app_ids, &country)).and_then(|body| prices_from(&body)) {
-            Ok(found) => found,
-            Err(error) => {
-                eprintln!("no prices from Steam: {error}");
-                return;
-            }
-        };
+        let found =
+            match fetch(&appdetails_url(&app_ids, &country)).and_then(|body| prices_from(&body)) {
+                Ok(found) => found,
+                Err(error) => {
+                    eprintln!("no prices from Steam: {error}");
+                    return;
+                }
+            };
         let prices: BTreeMap<String, String> = asked
             .into_iter()
             .filter_map(|(product, app_id)| Some((product, found.get(&app_id)?.clone())))
@@ -388,7 +392,9 @@ mod tests {
             ]
         );
         assert_eq!(
-            rich_presence(Some(&page("relaying", None, None)))[0].1.as_deref(),
+            rich_presence(Some(&page("relaying", None, None)))[0]
+                .1
+                .as_deref(),
             Some("#Relaying")
         );
         let room = page("collaborating", None, Some("0123abcd"));

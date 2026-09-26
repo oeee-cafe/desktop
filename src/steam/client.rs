@@ -70,7 +70,10 @@ pub fn start() -> Option<Arc<Steam>> {
         move |response: TicketForWebApiResponse| {
             let reply = {
                 let mut waiting = waiting.lock().unwrap();
-                let Some(at) = waiting.iter().position(|(h, _)| *h == response.ticket_handle) else {
+                let Some(at) = waiting
+                    .iter()
+                    .position(|(h, _)| *h == response.ticket_handle)
+                else {
                     return;
                 };
                 waiting.swap_remove(at).1

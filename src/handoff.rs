@@ -42,7 +42,9 @@ pub fn browse(app: &AppHandle, site: &Url, url: &str) {
     };
     if !opened {
         if let Some(window) = app.get_webview_window(WINDOW) {
-            let _ = window.eval("window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.unopened();");
+            let _ = window.eval(
+                "window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.unopened();",
+            );
         }
     }
 }
@@ -81,7 +83,8 @@ pub fn on_window_event<R: tauri::Runtime>(window: &tauri::Window<R>, event: &tau
 }
 
 fn ask_now<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
-    let _ = window.eval("window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.resume();");
+    let _ =
+        window.eval("window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.resume();");
 }
 
 /// The scheme the browser is sent to once the provider has answered.
@@ -153,11 +156,17 @@ mod tests {
 
     #[test]
     fn opens_nothing_else_of_google_or_anyone() {
-        assert!(!opens("http://accounts.google.com/o/oauth2/v2/auth?state=S"));
+        assert!(!opens(
+            "http://accounts.google.com/o/oauth2/v2/auth?state=S"
+        ));
         assert!(!opens("https://accounts.google.com/signin/v2/identifier"));
         assert!(!opens("https://accounts.google.com:8443/o/oauth2/v2/auth"));
-        assert!(!opens("https://someone:secret@accounts.google.com/o/oauth2/v2/auth"));
-        assert!(!opens("https://accounts.google.com.example/o/oauth2/v2/auth"));
+        assert!(!opens(
+            "https://someone:secret@accounts.google.com/o/oauth2/v2/auth"
+        ));
+        assert!(!opens(
+            "https://accounts.google.com.example/o/oauth2/v2/auth"
+        ));
         assert!(!opens("https://example.com/"));
         assert!(!opens("file:///C:/Windows/System32/calc.exe"));
     }

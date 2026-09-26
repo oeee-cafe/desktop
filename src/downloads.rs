@@ -36,7 +36,10 @@ fn ask_where<R: Runtime>(webview: &Webview<R>, suggested: &Path) -> Option<PathB
         dialog = dialog.set_file_name(name.to_string_lossy());
     }
     // Keeps the name's extension when the player types a name without one.
-    if let Some(extension) = suggested.extension().map(|e| e.to_string_lossy().into_owned()) {
+    if let Some(extension) = suggested
+        .extension()
+        .map(|e| e.to_string_lossy().into_owned())
+    {
         dialog = dialog.add_filter(extension.to_uppercase(), &[extension]);
     }
     let window = webview.window();

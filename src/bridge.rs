@@ -189,7 +189,10 @@ mod tests {
             parse(&sent(r#"{"v":1,"type":"unread","count":3}"#)),
             Some(Message::Unread { count: 3 })
         );
-        assert_eq!(parse(&sent(r#"{"v":1,"type":"unread","count":null}"#)), None);
+        assert_eq!(
+            parse(&sent(r#"{"v":1,"type":"unread","count":null}"#)),
+            None
+        );
         assert_eq!(parse(&sent(r#"{"v":1,"type":"unread","count":"x"}"#)), None);
     }
 
@@ -205,13 +208,16 @@ mod tests {
             }))
         );
         // A page without the design system's stylesheet has none.
-        let message = sent(r#"{"v":1,"type":"theme","choice":"system","dark":false,"ground":null}"#);
+        let message =
+            sent(r#"{"v":1,"type":"theme","choice":"system","dark":false,"ground":null}"#);
         assert_eq!(parse(&message), Some(Message::Theme(Theme::default())));
     }
 
     #[test]
     fn words_the_page_leaves_out_are_the_apps_own() {
-        let Some(Message::Words(words)) = parse(&sent(r#"{"v":1,"type":"words","leave":"떠나기"}"#)) else {
+        let Some(Message::Words(words)) =
+            parse(&sent(r#"{"v":1,"type":"words","leave":"떠나기"}"#))
+        else {
             panic!("not understood");
         };
         assert_eq!(words.leave, "떠나기");
@@ -265,13 +271,18 @@ mod tests {
     #[test]
     fn a_page_asks_what_products_cost() {
         assert_eq!(
-            parse(&sent(r#"{"v":1,"type":"prices","products":["3456780","9NBLGGH4R315"]}"#)),
+            parse(&sent(
+                r#"{"v":1,"type":"prices","products":["3456780","9NBLGGH4R315"]}"#
+            )),
             Some(Message::Prices {
                 products: vec!["3456780".into(), "9NBLGGH4R315".into()]
             })
         );
         assert_eq!(parse(&sent(r#"{"v":1,"type":"prices"}"#)), None);
-        assert_eq!(parse(&sent(r#"{"v":1,"type":"prices","products":[1]}"#)), None);
+        assert_eq!(
+            parse(&sent(r#"{"v":1,"type":"prices","products":[1]}"#)),
+            None
+        );
     }
 
     #[test]
@@ -313,9 +324,16 @@ mod tests {
 
     #[test]
     fn the_page_says_where_its_button_is() {
-        let place = Place { x: 1782, y: 0, width: 69, height: 78 };
+        let place = Place {
+            x: 1782,
+            y: 0,
+            width: 69,
+            height: 78,
+        };
         assert_eq!(
-            parse(&sent(r#"{"v":1,"type":"caption","place":{"x":1782,"y":0,"width":69,"height":78}}"#)),
+            parse(&sent(
+                r#"{"v":1,"type":"caption","place":{"x":1782,"y":0,"width":69,"height":78}}"#
+            )),
             Some(Message::Caption { place: Some(place) })
         );
         assert_eq!(
@@ -327,9 +345,29 @@ mod tests {
     #[test]
     fn the_stand_in_is_never_bigger_than_a_button() {
         assert_eq!(
-            Place { x: -5, y: -5, width: 5000, height: 5000 }.bounded(),
-            Some(Place { x: 0, y: 0, width: MOST, height: MOST })
+            Place {
+                x: -5,
+                y: -5,
+                width: 5000,
+                height: 5000
+            }
+            .bounded(),
+            Some(Place {
+                x: 0,
+                y: 0,
+                width: MOST,
+                height: MOST
+            })
         );
-        assert_eq!(Place { x: 0, y: 0, width: 0, height: 52 }.bounded(), None);
+        assert_eq!(
+            Place {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 52
+            }
+            .bounded(),
+            None
+        );
     }
 }

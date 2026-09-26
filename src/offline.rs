@@ -43,7 +43,9 @@ pub fn loader_for(loader: &Url, page: &Url) -> Url {
         if let Some(site) = site {
             query.append_pair("site", &site);
         }
-        query.append_pair("page", page.as_str()).append_pair("offline", "1");
+        query
+            .append_pair("page", page.as_str())
+            .append_pair("offline", "1");
     }
     back
 }

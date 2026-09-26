@@ -100,51 +100,57 @@ fn listen_to_the_site(
     microsoft: Option<Arc<microsoft::Microsoft>>,
 ) {
     let (window, site) = (window.clone(), site.clone());
-    app.listen_any(bridge::EVENT, move |event| match bridge::parse(event.payload()) {
-        Some(bridge::Message::Page(page)) => {
-            // Nobody signed in has no bell, and so no count to send.
-            if page.signed_in == Some(false) {
-                badge::show(&window, 0);
+    app.listen_any(bridge::EVENT, move |event| {
+        match bridge::parse(event.payload()) {
+            Some(bridge::Message::Page(page)) => {
+                // Nobody signed in has no bell, and so no count to send.
+                if page.signed_in == Some(false) {
+                    badge::show(&window, 0);
+                }
+                if let Some(steam) = &steam {
+                    steam.show_presence(Some(&page));
+                }
             }
-            if let Some(steam) = &steam {
-                steam.show_presence(Some(&page));
+            Some(bridge::Message::Unread { count }) => badge::show(&window, count),
+            Some(bridge::Message::Theme(theme)) => {
+                if let Some(ground) = theme.ground {
+                    chrome::paint_ground(&window, &ground);
+                }
             }
-        }
-        Some(bridge::Message::Unread { count }) => badge::show(&window, count),
-        Some(bridge::Message::Theme(theme)) => {
-            if let Some(ground) = theme.ground {
-                chrome::paint_ground(&window, &ground);
+            Some(bridge::Message::Words(said)) => words::heard(said),
+            Some(bridge::Message::Window { action }) => chrome::window_asked(&window, &action),
+            Some(bridge::Message::Caption { place }) => chrome::caption_placed(&window, place),
+            Some(bridge::Message::Browse { url }) => {
+                handoff::browse(window.app_handle(), &site, &url)
             }
-        }
-        Some(bridge::Message::Words(said)) => words::heard(said),
-        Some(bridge::Message::Window { action }) => chrome::window_asked(&window, &action),
-        Some(bridge::Message::Caption { place }) => chrome::caption_placed(&window, place),
-        Some(bridge::Message::Browse { url }) => handoff::browse(window.app_handle(), &site, &url),
-        Some(bridge::Message::Notify { title, body, url }) => {
-            notify::show(&window, &site, title, body, url)
-        }
-        // The page asks this app only for Steam's sign-in, and only where
-        // the user agent named Steam as the store (steam::store). Answered
-        // with nothing where there is no Steam, rather than left waiting.
-        Some(bridge::Message::SignIn) => steam::answer_sign_in(window.app_handle(), steam.clone()),
-        // Likewise only a page whose user agent named a store asks what
-        // anything costs or to buy it, and a build sells through one store
-        // at most.
-        Some(bridge::Message::Prices { products }) => {
-            if let Some(steam) = &steam {
-                steam::answer_prices(window.app_handle(), steam, products);
-            } else if let Some(microsoft) = &microsoft {
-                microsoft.answer_prices(products);
+            Some(bridge::Message::Notify { title, body, url }) => {
+                notify::show(&window, &site, title, body, url)
             }
-        }
-        Some(bridge::Message::Purchase { product }) => {
-            if let Some(steam) = &steam {
-                steam::open_store(steam, &product);
-            } else if let Some(microsoft) = &microsoft {
-                microsoft.sell(product);
+            // The page asks this app only for Steam's sign-in, and only where
+            // the user agent named Steam as the store (steam::store). Answered
+            // with nothing where there is no Steam, rather than left waiting.
+            Some(bridge::Message::SignIn) => {
+                steam::answer_sign_in(window.app_handle(), steam.clone())
             }
+            // Likewise only a page whose user agent named a store asks what
+            // anything costs or to buy it, and a build sells through one store
+            // at most.
+            Some(bridge::Message::Prices { products }) => {
+                if let Some(steam) = &steam {
+                    steam::answer_prices(window.app_handle(), steam, products);
+                } else if let Some(microsoft) = &microsoft {
+                    microsoft.answer_prices(products);
+                }
+            }
+            Some(bridge::Message::Purchase { product }) => {
+                if let Some(steam) = &steam {
+                    steam::open_store(steam, &product);
+                } else if let Some(microsoft) = &microsoft {
+                    microsoft.sell(product);
+                }
+            }
+            Some(bridge::Message::Other) | None => {}
         }
-        Some(bridge::Message::Other) | None => {}
     });
 }
 

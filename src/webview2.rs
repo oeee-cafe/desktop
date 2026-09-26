@@ -19,14 +19,14 @@
 
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2ContextMenuItemCollection, ICoreWebView2Environment9,
-    ICoreWebView2NavigationCompletedEventArgs2,
-    ICoreWebView2Settings2, ICoreWebView2Settings3, ICoreWebView2Settings4, ICoreWebView2_11, ICoreWebView2_2,
-    COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND, COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_COMMAND,
-    COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_SEPARATOR, COREWEBVIEW2_KEY_EVENT_KIND,
-    COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN, COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
-    COREWEBVIEW2_PHYSICAL_KEY_STATUS, COREWEBVIEW2_SCRIPT_DIALOG_KIND,
-    COREWEBVIEW2_SCRIPT_DIALOG_KIND_BEFOREUNLOAD, COREWEBVIEW2_WEB_ERROR_STATUS,
-    COREWEBVIEW2_WEB_ERROR_STATUS_CANNOT_CONNECT, COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_ABORTED,
+    ICoreWebView2NavigationCompletedEventArgs2, ICoreWebView2Settings2, ICoreWebView2Settings3,
+    ICoreWebView2Settings4, ICoreWebView2_11, ICoreWebView2_2, COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND,
+    COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_COMMAND, COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_SEPARATOR,
+    COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
+    COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN, COREWEBVIEW2_PHYSICAL_KEY_STATUS,
+    COREWEBVIEW2_SCRIPT_DIALOG_KIND, COREWEBVIEW2_SCRIPT_DIALOG_KIND_BEFOREUNLOAD,
+    COREWEBVIEW2_WEB_ERROR_STATUS, COREWEBVIEW2_WEB_ERROR_STATUS_CANNOT_CONNECT,
+    COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_ABORTED,
     COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_RESET, COREWEBVIEW2_WEB_ERROR_STATUS_DISCONNECTED,
     COREWEBVIEW2_WEB_ERROR_STATUS_HOST_NAME_NOT_RESOLVED,
     COREWEBVIEW2_WEB_ERROR_STATUS_SERVER_UNREACHABLE, COREWEBVIEW2_WEB_ERROR_STATUS_TIMEOUT,
@@ -38,7 +38,9 @@ use webview2_com::{
 };
 use windows::core::{Interface, HSTRING, PWSTR};
 use windows::Win32::System::Com::{CoTaskMemFree, IStream};
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT,
+};
 
 use crate::context_menu::{self, Item};
 use crate::dialogs;
@@ -46,7 +48,9 @@ use crate::keys::{self, Modifiers};
 use crate::offline;
 
 /// A string WebView2 hands over, which the caller frees.
-unsafe fn take_string(get: impl FnOnce(*mut PWSTR) -> windows::core::Result<()>) -> windows::core::Result<String> {
+unsafe fn take_string(
+    get: impl FnOnce(*mut PWSTR) -> windows::core::Result<()>,
+) -> windows::core::Result<String> {
     let mut value = PWSTR::null();
     get(&mut value)?;
     let text = value.to_string().unwrap_or_default();
@@ -89,7 +93,10 @@ fn name_the_app(webview: &tauri::webview::PlatformWebview, store: Option<&str>) 
         let Ok(core) = webview.controller().CoreWebView2() else {
             return;
         };
-        let Ok(settings) = core.Settings().and_then(|settings| settings.cast::<ICoreWebView2Settings2>()) else {
+        let Ok(settings) = core
+            .Settings()
+            .and_then(|settings| settings.cast::<ICoreWebView2Settings2>())
+        else {
             return;
         };
         let Ok(default) = take_string(|value| settings.UserAgent(value)) else {
@@ -168,7 +175,9 @@ pub fn on_keys(webview: &tauri::webview::PlatformWebview, act: impl Fn(keys::Act
             };
             let mut kind = COREWEBVIEW2_KEY_EVENT_KIND::default();
             args.KeyEventKind(&mut kind)?;
-            if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN {
+            if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+                && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
+            {
                 return Ok(());
             }
             let mut key = 0;
@@ -372,7 +381,9 @@ unsafe fn trim(items: &ICoreWebView2ContextMenuItemCollection) -> windows::core:
 /// Puts `text` on the clipboard, as the system's own Copy does.
 fn copy_text(text: &str) -> windows::core::Result<()> {
     use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL};
-    use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
+    use windows::Win32::System::DataExchange::{
+        CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+    };
     use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
     use windows::Win32::System::Ole::CF_UNICODETEXT;
 
@@ -429,7 +440,11 @@ mod tests {
 
     #[test]
     fn no_answer_is_unreachable() {
-        assert!(failed(false, COREWEBVIEW2_WEB_ERROR_STATUS_CANNOT_CONNECT, 0));
+        assert!(failed(
+            false,
+            COREWEBVIEW2_WEB_ERROR_STATUS_CANNOT_CONNECT,
+            0
+        ));
         assert!(failed(false, COREWEBVIEW2_WEB_ERROR_STATUS_TIMEOUT, 0));
     }
 
@@ -445,6 +460,10 @@ mod tests {
         assert!(!failed(false, COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN, 404));
         assert!(!failed(false, COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN, 500));
         // A link handed to the browser, or a page the player chose to stay on.
-        assert!(!failed(false, COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED, 0));
+        assert!(!failed(
+            false,
+            COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED,
+            0
+        ));
     }
 }

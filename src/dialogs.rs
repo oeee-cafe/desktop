@@ -57,7 +57,10 @@ mod tests {
         let words = words::Words::default();
         let leave = words.leave.as_str();
         assert!(leaves(&MessageDialogResult::Custom(leave.into()), leave));
-        assert!(!leaves(&MessageDialogResult::Custom(words.stay.clone()), leave));
+        assert!(!leaves(
+            &MessageDialogResult::Custom(words.stay.clone()),
+            leave
+        ));
         assert!(!leaves(&MessageDialogResult::Cancel, leave));
     }
 }

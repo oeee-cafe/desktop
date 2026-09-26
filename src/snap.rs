@@ -198,7 +198,11 @@ unsafe extern "system" fn stand_in_proc(
                 if let Ok(parent) = GetParent(hwnd) {
                     // As the system's button asks it, so the window's own
                     // maximising -- to the work area, undecorated -- runs.
-                    let command = if IsZoomed(parent).as_bool() { SC_RESTORE } else { SC_MAXIMIZE };
+                    let command = if IsZoomed(parent).as_bool() {
+                        SC_RESTORE
+                    } else {
+                        SC_MAXIMIZE
+                    };
                     let _ = PostMessageW(
                         Some(parent),
                         WM_SYSCOMMAND,

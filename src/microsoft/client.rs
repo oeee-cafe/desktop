@@ -128,7 +128,8 @@ impl Microsoft {
     fn prices(&self, products: &[String]) -> windows::core::Result<BTreeMap<String, String>> {
         let context = self.context()?;
         let kinds = IIterable::<HSTRING>::from(vec![HSTRING::from(DURABLE)]);
-        let ids = IIterable::<HSTRING>::from(products.iter().map(HSTRING::from).collect::<Vec<_>>());
+        let ids =
+            IIterable::<HSTRING>::from(products.iter().map(HSTRING::from).collect::<Vec<_>>());
         let answer = context.GetStoreProductsAsync(&kinds, &ids)?.get()?;
         answer.ExtendedError()?.ok()?;
         let found = answer.Products()?;
@@ -200,8 +201,14 @@ impl Microsoft {
                 | StorePurchaseStatus::AlreadyPurchased
                 | StorePurchaseStatus::NotPurchased
         ) {
-            let error = result.ExtendedError().map(|e| e.message()).unwrap_or_default();
-            eprintln!("the Store could not sell {product:?}: it said {} ({error})", status.0);
+            let error = result
+                .ExtendedError()
+                .map(|e| e.message())
+                .unwrap_or_default();
+            eprintln!(
+                "the Store could not sell {product:?}: it said {} ({error})",
+                status.0
+            );
         }
         Ok((context, status.0))
     }

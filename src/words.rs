@@ -46,7 +46,9 @@ static HEARD: RwLock<Option<Words>> = RwLock::new(None);
 
 /// Keeps the words a page sent, for every dialog and menu after.
 pub fn heard(words: Words) {
-    *HEARD.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(words);
+    *HEARD
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(words);
 }
 
 /// The words to say now: the page's, or English before it has said any.

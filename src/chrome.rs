@@ -116,7 +116,9 @@ fn background(theme: Theme) -> Color {
 }
 
 fn said_ground() -> Option<Color> {
-    *GROUND.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    *GROUND
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Paints the window's ground for the system's theme now.
@@ -135,7 +137,9 @@ pub fn paint_ground<R: tauri::Runtime>(window: &WebviewWindow<R>, ground: &str) 
     let Some(ground) = hex_colour(ground) else {
         return;
     };
-    *GROUND.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(ground);
+    *GROUND
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(ground);
     let _ = window.set_background_color(Some(ground));
 }
 
@@ -173,7 +177,11 @@ fn hex_colour(text: &str) -> Option<Color> {
         channel(0, width)?,
         channel(width, width)?,
         channel(2 * width, width)?,
-        if alpha { channel(3 * width, width)? } else { 0xff },
+        if alpha {
+            channel(3 * width, width)?
+        } else {
+            0xff
+        },
     ))
 }
 
@@ -195,7 +203,10 @@ mod tests {
     fn a_build_that_sells_names_its_store_after_the_app() {
         let edge = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0";
         let named = user_agent(edge, Some("steam"));
-        assert_eq!(named, format!("{edge} OeeeCafe platform/windows store/steam"));
+        assert_eq!(
+            named,
+            format!("{edge} OeeeCafe platform/windows store/steam")
+        );
         assert_eq!(user_agent(&named, Some("steam")), named);
         assert_eq!(
             user_agent(edge, Some("microsoft")),
@@ -213,7 +224,15 @@ mod tests {
 
     #[test]
     fn a_colour_that_is_not_hex_is_nothing() {
-        for text in ["", "#", "ccccff", "#ccccf", "#gggggg", "rgb(204, 204, 255)", "lavender"] {
+        for text in [
+            "",
+            "#",
+            "ccccff",
+            "#ccccf",
+            "#gggggg",
+            "rgb(204, 204, 255)",
+            "lavender",
+        ] {
             assert_eq!(hex_colour(text), None, "{text}");
         }
     }
