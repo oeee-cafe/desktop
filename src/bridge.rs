@@ -74,6 +74,14 @@ pub enum Message {
         #[serde(default)]
         place: Option<Place>,
     },
+    /// A new notification for the reader, heard by the page while the window
+    /// was not in front: shown as Windows's own (notify.rs). `url` is a
+    /// path on the site.
+    Notify {
+        title: String,
+        body: String,
+        url: String,
+    },
     /// Anything else the site says -- `restore` among it, which neither
     /// store here has: Steam and the Microsoft Store both keep what was
     /// bought on the account, and the site asks them.

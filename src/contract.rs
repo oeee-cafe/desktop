@@ -60,6 +60,11 @@ fn expected(kind: &str, m: &Value) -> Option<Message> {
         "theme" => Message::Theme(Theme {
             ground: text(&m["ground"]),
         }),
+        "notify" => Message::Notify {
+            title: text(&m["title"])?,
+            body: text(&m["body"])?,
+            url: text(&m["url"])?,
+        },
         "browse" => Message::Browse {
             url: text(&m["url"]).expect("a url"),
         },

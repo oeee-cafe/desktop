@@ -41,6 +41,7 @@ mod keys;
 mod leave;
 mod microsoft;
 mod navigation;
+mod notify;
 // What a page that failed is sent back to is WebView2's to report (webview2.rs).
 #[cfg_attr(not(windows), allow(dead_code))]
 mod offline;
@@ -119,6 +120,9 @@ fn listen_to_the_site(
         Some(bridge::Message::Window { action }) => chrome::window_asked(&window, &action),
         Some(bridge::Message::Caption { place }) => chrome::caption_placed(&window, place),
         Some(bridge::Message::Browse { url }) => handoff::browse(window.app_handle(), &site, &url),
+        Some(bridge::Message::Notify { title, body, url }) => {
+            notify::show(&window, &site, title, body, url)
+        }
         // The page asks this app only for Steam's sign-in, and only where
         // the user agent named Steam as the store (steam::store). Answered
         // with nothing where there is no Steam, rather than left waiting.

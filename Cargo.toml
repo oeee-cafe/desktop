@@ -50,8 +50,10 @@ ureq = { version = "3", optional = true, default-features = false, features = ["
 # The lists the Store's calls take, which `windows` does not re-export.
 windows-collections = "0.2"
 windows = { version = "0.61", features = [
+  "Data_Xml_Dom",
   "Foundation_Collections",
   "Services_Store",
+  "UI_Notifications",
   "Win32_Foundation",
   "Win32_Graphics_Gdi",
   "Win32_Storage_Packaging_Appx",
@@ -60,6 +62,7 @@ windows = { version = "0.61", features = [
   "Win32_System_LibraryLoader",
   "Win32_System_Memory",
   "Win32_System_Ole",
+  "Win32_System_Registry",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
