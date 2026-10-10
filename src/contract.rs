@@ -53,6 +53,9 @@ fn expected(kind: &str, m: &Value) -> Option<Message> {
             presence: text(&m["presence"]),
             community: text(&m["community"]),
             group: text(&m["group"]),
+            join: text(&m["join"]),
+            seats: m["seats"].as_i64().map(|n| n as i32),
+            party: m["party"].as_i64().map(|n| n as i32),
         }),
         "unread" => Message::Unread {
             count: m["count"].as_i64().expect("a count"),
@@ -127,6 +130,14 @@ fn every_message_the_page_sends_is_understood() {
                 assert_eq!(Some(words.leave), text(&example["leave"]));
                 assert_eq!(Some(words.stay), text(&example["stay"]));
                 assert_eq!(Some(words.copy_link), text(&example["copyLink"]));
+                assert_eq!(
+                    Some(words.presence_browsing),
+                    text(&example["presenceBrowsing"])
+                );
+                assert_eq!(
+                    Some(words.presence_collaborating),
+                    text(&example["presenceCollaborating"])
+                );
             } else {
                 let want = expected(kind, example)
                     .unwrap_or_else(|| panic!("a type the app has not been told about: {kind}"));

@@ -3,3 +3,4 @@
 steam_appid.txt
 *.pfx
 *.cer
+/discord/social_sdk

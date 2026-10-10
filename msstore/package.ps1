@@ -103,10 +103,11 @@ foreach ($arch in $Architectures) {
   $triple = $triples[$arch]
 
   # Without Steam: its library is not in the package, and the app never
-  # asks for it (README.md).
+  # asks for it (README.md). With Discord, whose library goes in beside the
+  # program (discord/README.md).
   Push-Location $root
   try {
-    Run 'cargo' 'tauri' 'build' '--no-bundle' '--target' $triple '--' '--no-default-features'
+    Run 'cargo' 'tauri' 'build' '--no-bundle' '--target' $triple '--' '--no-default-features' '--features' 'discord'
   } finally {
     Pop-Location
   }
@@ -117,6 +118,10 @@ foreach ($arch in $Architectures) {
   if (Test-Path $layout) { Remove-Item $layout -Recurse -Force }
   New-Item $layout -ItemType Directory | Out-Null
   Copy-Item (Join-Path $root "target\$triple\release\oeee-cafe-desktop.exe") $layout
+  # The Social SDK keeps Windows on ARM's library in a folder of its own.
+  $sdkBin = Join-Path $root 'discord\social_sdk\bin\release'
+  if ($arch -eq 'arm64') { $sdkBin = Join-Path $sdkBin 'arm64' }
+  Copy-Item (Join-Path $sdkBin 'discord_partner_sdk.dll') $layout
   Copy-Item (Join-Path $PSScriptRoot 'Assets') $layout -Recurse
   Copy-Item (Join-Path $PSScriptRoot 'Strings') $layout -Recurse
 

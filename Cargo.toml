@@ -10,12 +10,19 @@ description = "Oeee Cafe for the desktop, on Steam and the Microsoft Store: a wi
 # Steam: signing in, rich presence, the Supporter Pack's price, and Steam's
 # library beside the binary, which the app then cannot start without. A
 # build for the Microsoft Store leaves it out with `--no-default-features`.
+# Discord: what the player is doing, and asking friends into a collaborative
+# room, through Discord's Social SDK, which is not in the repository and has
+# to be put in discord/social_sdk/ first (discord/README.md). The Microsoft
+# Store's build asks for it by name (msstore/package.ps1).
 [features]
-default = ["steam"]
+default = ["steam", "discord"]
 steam = ["dep:steamworks", "dep:ureq"]
+discord = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# Compiles src/discord/shim.cpp against the Social SDK's C++ header.
+cc = "1"
 
 [dependencies]
 tauri = { version = "2", features = [] }

@@ -119,6 +119,11 @@ pub fn start() -> Option<Arc<Steam>> {
 }
 
 impl Steam {
+    /// The app's own id on Steam, which Steam started it as.
+    pub fn app_id(&self) -> u32 {
+        self.client.utils().app_id().0
+    }
+
     /// A Web API ticket for the site, hex-encoded. Blocks until Steam
     /// answers, so it is called off the main thread.
     pub fn web_api_ticket(&self) -> Result<String, String> {

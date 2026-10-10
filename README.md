@@ -164,6 +164,19 @@ that says nothing is browsing, and so is the bundled loader. Upload `steam/rich_
 (Community > Rich Presence Localization) whenever it changes; a token the
 app sets that Steam has not been given shows nothing.
 
+## Discord
+
+The same `page` message goes to Discord too, through its Social SDK
+(`src/discord.rs`), which talks to the Discord app running beside this one:
+nobody signs in to Discord here, and the site never learns a Discord account.
+Discord has no words of its own to look up, so the site sends them in the
+`words` message, in the page's language. In a collaborative room a friend
+could enter, the page also says the room's path, its seats and how many are
+in it, and the activity becomes a party with that path as its join secret:
+the player invites friends from Discord, or lets in one who asked, and Discord
+opens the friend's app, which opens the room. Setting it up, and what it
+looks like: discord/README.md.
+
 ## Achievements
 
 First drawing, first relay, first collaboration and buying the app on
@@ -218,7 +231,9 @@ cargo tauri build
 ```
 
 and put `target/release/oeee-cafe-desktop.exe` in `steam/content/windows/`,
-with `steam/redistributable/win64/steam_api64.dll` beside it; WebView2
+with `steam/redistributable/win64/steam_api64.dll` and
+`discord/social_sdk/bin/release/discord_partner_sdk.dll` beside it (Discord's
+Social SDK has to be unpacked first: discord/README.md); WebView2
 ships with Windows 10 and 11. Steam installs files and runs no installer,
 so the build makes none (`tauri.conf.json` leaves `bundle` inactive, and
 keeps only the `.exe`'s icon and copyright). Set the depot's launch option
@@ -311,5 +326,16 @@ changing it.
   run from Start. Not yet: the ARM64 package (it needs Visual Studio's ARM64
   build tools), a signed install, a Store submission, and a look at the
   taskbar icon and the unread dot in the packaged app.
+- **Discord.** Built and linked against Social SDK 1.10.19337 for x64 and
+  unit-tested, not yet run against Discord; the ARM64 build has not been
+  built.
+  Worth trying, with two Discord accounts that are friends: the activity on
+  the profile, the party's count as someone joins, an invitation accepted
+  with the app closed (a Steam launch and an `oeee-cafe://` one) and with it
+  open over an unsaved drawing, Ask to Join, and the app started before
+  Discord. In the MSIX, whether
+  Discord can launch the app at all: if the SDK registers the launch in the
+  registry, the package virtualises the write (as it does handoff.rs's), and
+  the scheme may need registering for Discord some other way.
 - **Icons.** Generated from the 256px `static/favicon.png` in oeee-cafe/web; regenerate from a
   1024px source with `cargo tauri icon <file>` before release.

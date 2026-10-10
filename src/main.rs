@@ -12,13 +12,14 @@
 //! Each thing the app does beside showing the site is its own module, and
 //! `main` only puts them together: where links go (navigation.rs), the
 //! window's frame (chrome.rs), what the site tells the app (bridge.rs),
-//! Steam (steam.rs), losing a drawing (close_guard.rs), the site going away
+//! Steam (steam.rs), Discord (discord.rs), losing a drawing (close_guard.rs), the site going away
 //! (offline.rs), the store the build sells through (store.rs; steam.rs and
 //! microsoft.rs), and on Windows the keys (keys.rs), the browser's parts the
 //! app answers for (webview2.rs) and Snap Layouts (snap.rs).
 
 use std::sync::Arc;
 
+use tauri::webview::PageLoadEvent;
 use tauri::{App, Listener, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use url::Url;
 
@@ -32,6 +33,7 @@ mod contract;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod context_menu;
 mod dialogs;
+mod discord;
 mod downloads;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod handoff;
@@ -88,7 +90,7 @@ fn loader(site: &Url) -> String {
 }
 
 /// Acts on what the site says (bridge.rs): the unread count on the icon,
-/// what the player is doing for their Steam friends, the ground behind the
+/// what the player is doing for their Steam and Discord friends, the ground behind the
 /// page, the words for the app's own dialogs, a sign-in to open in the
 /// browser, Steam's sign-in, and the store -- Steam's or the Microsoft
 /// Store's, whichever the build sells through.
@@ -98,6 +100,7 @@ fn listen_to_the_site(
     site: &Url,
     steam: Option<Arc<steam::Steam>>,
     microsoft: Option<Arc<microsoft::Microsoft>>,
+    discord: Option<Arc<discord::Discord>>,
 ) {
     let (window, site) = (window.clone(), site.clone());
     app.listen_any(bridge::EVENT, move |event| {
@@ -109,6 +112,10 @@ fn listen_to_the_site(
                 }
                 if let Some(steam) = &steam {
                     steam.show_presence(Some(&page));
+                }
+                if let Some(discord) = &discord {
+                    discord.show_presence(Some(&page));
+                    discord.page_shown();
                 }
             }
             Some(bridge::Message::Unread { count }) => badge::show(&window, count),
@@ -154,6 +161,31 @@ fn listen_to_the_site(
     });
 }
 
+/// Says the player is browsing, to Steam and Discord, whenever the window
+/// shows a page that is not the site's -- the loader, or its "can't be
+/// reached" page -- which sends no `page` message to say otherwise.
+fn browsing_off_the_site<'a, M: Manager<tauri::Wry>>(
+    builder: WebviewWindowBuilder<'a, tauri::Wry, M>,
+    steam: Option<Arc<steam::Steam>>,
+    discord: Option<Arc<discord::Discord>>,
+    site: &Url,
+) -> WebviewWindowBuilder<'a, tauri::Wry, M> {
+    if steam.is_none() && discord.is_none() {
+        return builder;
+    }
+    let site = site.clone();
+    builder.on_page_load(move |_window, payload| {
+        if payload.event() == PageLoadEvent::Finished && !site::is_site(payload.url(), &site) {
+            if let Some(steam) = &steam {
+                steam.show_presence(None);
+            }
+            if let Some(discord) = &discord {
+                discord.show_presence(None);
+            }
+        }
+    })
+}
+
 fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri::Result<()> {
     app.add_capability(site_capability(site))?;
 
@@ -174,13 +206,21 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
             let _ = window.set_title(if title.is_empty() { "Oeee Cafe" } else { title });
         });
     let builder = chrome::prepare(builder).initialization_script(bridge::SCRIPT);
-    let builder = steam::prepare(builder, steam, site);
+    let discord = discord::start(app.handle(), site, steam::app_id(steam));
+    let builder = browsing_off_the_site(builder, steam.clone(), discord.clone(), site);
     let window = navigation::prepare(builder, app.handle(), site).build()?;
 
     // The Microsoft Store's build sells through the Store when it is the
     // Store's package; everywhere else there is none.
     let microsoft = microsoft::start(&window);
-    listen_to_the_site(app, &window, site, steam.clone(), microsoft.clone());
+    listen_to_the_site(
+        app,
+        &window,
+        site,
+        steam.clone(),
+        microsoft.clone(),
+        discord,
+    );
     steam::watch_dlc(app.handle(), steam);
     chrome::paint_background(&window);
 

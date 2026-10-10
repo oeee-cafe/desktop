@@ -27,6 +27,20 @@ pub struct Words {
     /// The right-click menu's item for a link (webview2.rs).
     #[cfg_attr(not(windows), allow(dead_code))]
     pub copy_link: String,
+    /// What Discord shows the player doing (discord.rs): one for each
+    /// activity presence_meta.jinja names, and browsing for any other page.
+    #[cfg_attr(not(feature = "discord"), allow(dead_code))]
+    pub presence_browsing: String,
+    #[cfg_attr(not(feature = "discord"), allow(dead_code))]
+    pub presence_drawing: String,
+    #[cfg_attr(not(feature = "discord"), allow(dead_code))]
+    pub presence_relaying: String,
+    #[cfg_attr(not(feature = "discord"), allow(dead_code))]
+    pub presence_collaborating: String,
+    #[cfg_attr(not(feature = "discord"), allow(dead_code))]
+    pub presence_drawing_banner: String,
+    #[cfg_attr(not(feature = "discord"), allow(dead_code))]
+    pub presence_watching_replay: String,
 }
 
 impl Default for Words {
@@ -37,6 +51,12 @@ impl Default for Words {
             leave: "Leave".into(),
             stay: "Stay".into(),
             copy_link: "Copy link".into(),
+            presence_browsing: "Browsing Oeee Cafe".into(),
+            presence_drawing: "Drawing".into(),
+            presence_relaying: "Drawing a relay".into(),
+            presence_collaborating: "Drawing together".into(),
+            presence_drawing_banner: "Drawing a banner".into(),
+            presence_watching_replay: "Watching a replay".into(),
         }
     }
 }

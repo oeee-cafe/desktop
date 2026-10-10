@@ -43,13 +43,11 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Manager, WebviewWindowBuilder};
-use url::Url;
+use tauri::{AppHandle, Manager};
 
 use crate::bridge::Page;
 use crate::store::{self, quoted};
-use crate::{site, WINDOW};
+use crate::WINDOW;
 
 #[cfg(feature = "steam")]
 mod client;
@@ -80,6 +78,10 @@ impl Steam {
     }
 
     pub fn country(&self) -> String {
+        match *self {}
+    }
+
+    pub fn app_id(&self) -> u32 {
         match *self {}
     }
 }
@@ -165,23 +167,10 @@ fn sign_in_script(ticket: Option<&str>) -> String {
     )
 }
 
-/// Says the player is browsing whenever the window shows a page that is not
-/// the site's -- the loader, or its "can't be reached" page -- which sends no
-/// `page` message to say otherwise.
-pub fn prepare<'a, M: Manager<tauri::Wry>>(
-    builder: WebviewWindowBuilder<'a, tauri::Wry, M>,
-    steam: &Option<Arc<Steam>>,
-    site: &Url,
-) -> WebviewWindowBuilder<'a, tauri::Wry, M> {
-    let Some(steam) = steam.clone() else {
-        return builder;
-    };
-    let site = site.clone();
-    builder.on_page_load(move |_window, payload| {
-        if payload.event() == PageLoadEvent::Finished && !site::is_site(payload.url(), &site) {
-            steam.show_presence(None);
-        }
-    })
+/// The app's own Steam app id, when Steam started it: Discord launches the
+/// app through Steam then, for a friend asked into a room (discord.rs).
+pub fn app_id(steam: &Option<Arc<Steam>>) -> Option<u32> {
+    steam.as_ref().map(|steam| steam.app_id())
 }
 
 /// A DLC bought while the app is open -- the Supporter Pack, in the overlay

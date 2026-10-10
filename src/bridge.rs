@@ -138,6 +138,14 @@ pub struct Page {
     pub community: Option<String>,
     #[serde(default)]
     pub group: Option<String>,
+    /// In a collaborative room a friend could enter, the path that joins it,
+    /// with how many may be in it and how many are (discord.rs).
+    #[serde(default)]
+    pub join: Option<String>,
+    #[serde(default)]
+    pub seats: Option<i32>,
+    #[serde(default)]
+    pub party: Option<i32>,
 }
 
 /// What the site says about its colours, as far as the app uses them.
@@ -309,6 +317,7 @@ mod tests {
                 presence: Some("watching-replay".into()),
                 community: Some("오이카페 \"모에화\"".into()),
                 group: None,
+                ..Page::default()
             }))
         );
     }
