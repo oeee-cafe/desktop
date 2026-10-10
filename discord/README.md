@@ -60,3 +60,9 @@ cargo build --no-default-features --features steam
 Testing needs two Discord accounts that are friends, each with Discord's
 desktop app running, on two computers (or one Windows user account each):
 Discord does not deliver an invitation to the account that sent it.
+
+When nothing shows: the app prints `Discord: activity shown` each time
+Discord takes the activity, and the SDK's warnings beside it; set
+`OEEE_CAFE_DISCORD_LOG=1` for everything the SDK says. Shown, but not on
+the profile, is Discord's own setting: User Settings > Activity Privacy >
+Share your detected activities with others.

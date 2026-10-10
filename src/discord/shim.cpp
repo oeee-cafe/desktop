@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <string>
 
@@ -68,6 +69,14 @@ void oeee_discord_start(uint64_t app,
     context = ctx;
     shown = shown_cb;
     client = std::make_unique<discordpp::Client>();
+    // What the SDK says of itself, beside the app's own output: warnings
+    // and worse, or everything with OEEE_CAFE_DISCORD_LOG set.
+    client->AddLogCallback(
+      [](std::string message, discordpp::LoggingSeverity) {
+          std::fprintf(stderr, "Discord SDK: %s\n", message.c_str());
+      },
+      std::getenv("OEEE_CAFE_DISCORD_LOG") ? discordpp::LoggingSeverity::Verbose
+                                             : discordpp::LoggingSeverity::Warning);
     client->SetApplicationId(app);
     bool registered = steam_app != 0
       ? client->RegisterLaunchSteamApplication(app, steam_app)
@@ -110,7 +119,9 @@ void oeee_discord_show(const OeeeActivity* activity)
         a.SetSupportedPlatforms(discordpp::ActivityGamePlatforms::Desktop);
     }
     client->UpdateRichPresence(std::move(a), [](discordpp::ClientResult result) {
-        if (!result.Successful()) {
+        if (result.Successful()) {
+            std::fprintf(stderr, "Discord: activity shown\n");
+        } else {
             std::fprintf(stderr, "Discord: %s\n", result.ToString().c_str());
         }
         shown(context, result.Successful());
