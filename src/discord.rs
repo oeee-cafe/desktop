@@ -173,6 +173,17 @@ mod tests {
 
     const ROOM: &str = "/collaborate/9c881320-2b43-4afa-b2bb-7128c8a3e985";
 
+    /// The Store's package declares the scheme Discord opens the app by,
+    /// which the SDK's own registration cannot reach from inside it:
+    /// changing the application alone leaves the package unopenable.
+    #[test]
+    fn the_package_answers_the_scheme_discord_opens_the_app_by() {
+        let manifest = include_str!("../msstore/AppxManifest.xml");
+        assert!(manifest.contains(&format!(
+            r#"<uap:Protocol Name="discord-{APPLICATION_ID}">"#
+        )));
+    }
+
     fn room_page(join: Option<&str>, party: Option<i32>) -> Page {
         Page {
             presence: Some("collaborating".into()),

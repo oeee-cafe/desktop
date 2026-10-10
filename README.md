@@ -333,9 +333,10 @@ changing it.
   the profile, the party's count as someone joins, an invitation accepted
   with the app closed (a Steam launch and an `oeee-cafe://` one) and with it
   open over an unsaved drawing, Ask to Join, and the app started before
-  Discord. In the MSIX, whether
-  Discord can launch the app at all: if the SDK registers the launch in the
-  registry, the package virtualises the write (as it does handoff.rs's), and
-  the scheme may need registering for Discord some other way.
+  Discord. In the MSIX, an invitation accepted with the app closed: the SDK
+  registers `discord-<application id>://` in the registry, which the
+  package virtualises, so the manifest declares the scheme instead; that
+  Discord opens it rather than reading the registry's command has not been
+  seen.
 - **Icons.** Generated from the 256px `static/favicon.png` in oeee-cafe/web; regenerate from a
   1024px source with `cargo tauri icon <file>` before release.

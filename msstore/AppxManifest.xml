@@ -71,6 +71,17 @@
             <uap:DisplayName>ms-resource:AppName</uap:DisplayName>
           </uap:Protocol>
         </uap:Extension>
+        <!-- How Discord opens the app for a friend asked into a room
+             (discord.rs): it opens discord-<application id>://, which
+             Discord's SDK registers for the app at startup, in the registry,
+             like the scheme above, and which inside MSIX is virtualised in
+             the same way. Being opened is all it is for; the room comes by
+             the SDK once the app is up. The id is discord::APPLICATION_ID. -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="discord-1558602531133722646">
+            <uap:DisplayName>ms-resource:AppName</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
       </Extensions>
     </Application>
   </Applications>
