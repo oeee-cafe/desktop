@@ -116,7 +116,14 @@ void oeee_discord_show(const OeeeActivity* activity)
         discordpp::ActivitySecrets secrets;
         secrets.SetJoin(text(activity->join));
         a.SetSecrets(std::move(secrets));
-        a.SetSupportedPlatforms(discordpp::ActivityGamePlatforms::Desktop);
+        // Accepted on a phone too: Discord's app there opens the site at
+        // /_discord/join with the secret (the Developer Portal's Deep Link
+        // URL), and the site opens the room. Flags, which the header gives
+        // no operator to combine.
+        using P = discordpp::ActivityGamePlatforms;
+        a.SetSupportedPlatforms(static_cast<P>(static_cast<int>(P::Desktop)
+                                               | static_cast<int>(P::IOS)
+                                               | static_cast<int>(P::Android)));
     }
     client->UpdateRichPresence(std::move(a), [](discordpp::ClientResult result) {
         if (result.Successful()) {

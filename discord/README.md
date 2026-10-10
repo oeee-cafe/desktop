@@ -41,6 +41,13 @@ cargo build --no-default-features --features steam
 - **Rich Presence > Art Assets**: nothing is needed. Discord shows the
   application's own icon when an activity names no image.
 - The application's name is what Discord shows as the game: "Playing Oeee Cafe".
+- **Rich Presence > Deep Link URL**: `https://oeee.cafe`. A friend who accepts
+  an invitation in Discord's phone app is sent there, at
+  `/_discord/join?secret=...`, which the site turns into the room (oeee-cafe/web,
+  `discord_join`), in the browser or in the iOS app. Only once the site has
+  that route: the activity offers phones the invitation either way.
+- **Interactions Endpoint URL** and OAuth2 redirects: none. Nothing here is a
+  bot, and nobody signs in to Discord.
 
 ## What it does
 
@@ -56,6 +63,8 @@ cargo build --no-default-features --features steam
   through `oeee-cafe://` otherwise. So a friend needs to have opened the app
   once, and an Oeee Cafe account; the site decides, as it always does,
   whether they may enter and whether there is a seat.
+- A friend who accepts on their phone is sent to the room on the site (the
+  Deep Link URL above), and needs no app at all.
 
 Testing needs two Discord accounts that are friends, each with Discord's
 desktop app running, on two computers (or one Windows user account each):
