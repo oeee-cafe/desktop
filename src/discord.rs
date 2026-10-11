@@ -63,9 +63,22 @@ pub fn start(
 pub const APPLICATION_ID: u64 = 1558602531133722646;
 
 /// How Discord opens the app for a friend who was asked in, outside Steam:
-/// the scheme both builds answer (handoff.rs). It carries nothing; the
-/// secret comes by the SDK once the app is up.
+/// the scheme both builds answer (handoff.rs), given to the app itself. It
+/// carries nothing; the secret comes by the SDK once the app is up.
 pub const LAUNCH: &str = "oeee-cafe://discord";
+
+/// The command Discord is told to run: on Windows and Linux an executable
+/// with its arguments, not a URL -- given a bare scheme, Discord takes the
+/// app for one that cannot be started on that computer, and offers a friend
+/// there only "Join From a Supported Device". This executable, quoted, with
+/// [`LAUNCH`], which the running app takes as it takes the scheme opened.
+pub fn launch_command() -> String {
+    match std::env::current_exe() {
+        Ok(exe) => format!("\"{}\" {LAUNCH}", exe.display()),
+        // The SDK registers the running executable for an empty command.
+        Err(_) => String::new(),
+    }
+}
 
 /// What the player is doing, as Discord is to show it.
 #[derive(Clone, Debug, PartialEq, Eq)]

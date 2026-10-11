@@ -14,7 +14,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 use url::Url;
 
-use super::{room_path, shown, Shown, APPLICATION_ID, LAUNCH};
+use super::{launch_command, room_path, shown, Shown, APPLICATION_ID};
 use crate::bridge::Page;
 use crate::words;
 use crate::{site, WINDOW};
@@ -118,11 +118,12 @@ fn run(context: Context, steam_app: u32, told: Receiver<Shown>) {
     // Lives as long as the thread, which is as long as the app: shim.cpp
     // holds it for the SDK's callbacks.
     let context: *mut Context = Box::into_raw(Box::new(context));
+    let launch = launch_command();
     unsafe {
         oeee_discord_start(
             APPLICATION_ID,
             steam_app,
-            OeeeText::of(LAUNCH),
+            OeeeText::of(&launch),
             context.cast(),
             joined,
             shown_back,
