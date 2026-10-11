@@ -89,6 +89,14 @@ pub enum Message {
         #[serde(default)]
         user: Option<String>,
     },
+    /// Something asked of Steam in the Steam build (steam.rs): "invite",
+    /// with `join`, the path of the room to ask the player's Steam friends
+    /// into, which opens Steam's own invitation over the window.
+    Steam {
+        action: String,
+        #[serde(default)]
+        join: Option<String>,
+    },
     /// Anything else the site says -- `restore` among it, which neither
     /// store here has: Steam and the Microsoft Store both keep what was
     /// bought on the account, and the site asks them.

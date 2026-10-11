@@ -1,7 +1,7 @@
 //! Steam's API itself, in a build with the `steam` feature: the ticket the
 //! page asks for, the rich presence, handed to Steam as `super` works them out,
-//! the overlay's store page for a DLC, word of one installed, and the
-//! player's country for its price.
+//! the overlay's store page for a DLC, word of one installed, the
+//! player's country for its price, and a friend's way into a room.
 
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
@@ -46,12 +46,43 @@ unsafe impl Callback for DlcInstalled {
     }
 }
 
+type JoinListener = Arc<Mutex<Option<Box<dyn Fn(String) + Send>>>>;
+
+/// `GameRichPresenceJoinRequested_t`, read here rather than through the
+/// crate's own, which panics on a connect string that is not UTF-8: the
+/// string is a friend's app's word, and is read leniently and checked after
+/// (`super::watch_joins`).
+struct JoinRequested {
+    connect: String,
+}
+
+unsafe impl Callback for JoinRequested {
+    const ID: i32 = sys::GameRichPresenceJoinRequested_t_k_iCallback as _;
+
+    unsafe fn from_raw(raw: *mut c_void) -> Self {
+        let raw = raw
+            .cast::<sys::GameRichPresenceJoinRequested_t>()
+            .read_unaligned();
+        let bytes: Vec<u8> = raw
+            .m_rgchConnect
+            .iter()
+            .map(|c| *c as u8)
+            .take_while(|b| *b != 0)
+            .collect();
+        JoinRequested {
+            connect: String::from_utf8_lossy(&bytes).into_owned(),
+        }
+    }
+}
+
 pub struct Steam {
     client: Client,
     waiting: Waiting,
     dlc_listener: DlcListener,
+    join_listener: JoinListener,
     _ticket_callback: CallbackHandle,
     _dlc_callback: CallbackHandle,
+    _join_callback: CallbackHandle,
 }
 
 /// Starts Steam's API, or says why not and carries on without it.
@@ -98,6 +129,16 @@ pub fn start() -> Option<Arc<Steam>> {
         }
     });
 
+    let join_listener: JoinListener = Arc::default();
+    let join_callback = client.register_callback({
+        let join_listener = join_listener.clone();
+        move |requested: JoinRequested| {
+            if let Some(then) = join_listener.lock().unwrap().as_ref() {
+                then(requested.connect);
+            }
+        }
+    });
+
     // Callbacks arrive only when asked for. Nothing here is urgent, so ten
     // times a second is plenty.
     let pump = client.clone();
@@ -113,8 +154,10 @@ pub fn start() -> Option<Arc<Steam>> {
         client,
         waiting,
         dlc_listener,
+        join_listener,
         _ticket_callback: ticket_callback,
         _dlc_callback: dlc_callback,
+        _join_callback: join_callback,
     }))
 }
 
@@ -173,6 +216,26 @@ impl Steam {
     /// connect, for the currency the store's prices are asked in.
     pub fn country(&self) -> String {
         self.client.utils().ip_country()
+    }
+}
+
+impl Steam {
+    /// Calls `then` with a friend's connect string whenever the player joins
+    /// them from the friends list, or accepts their invitation, while the
+    /// app is running. On the thread that pumps Steam's callbacks.
+    pub fn on_join_requested(&self, then: impl Fn(String) + Send + 'static) {
+        *self.join_listener.lock().unwrap() = Some(Box::new(then));
+    }
+
+    /// Opens Steam's invitation over the window: the player's friends, to
+    /// send `connect` -- a room's path, which holds no NUL -- to.
+    pub fn invite(&self, connect: &str) {
+        if connect.contains('\0') {
+            return;
+        }
+        self.client
+            .friends()
+            .activate_invite_dialog_connect_string(connect);
     }
 }
 

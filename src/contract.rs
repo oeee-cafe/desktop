@@ -67,6 +67,10 @@ fn expected(kind: &str, m: &Value) -> Option<Message> {
             action: text(&m["action"]).expect("an action"),
             user: text(&m["user"]),
         },
+        "steam" => Message::Steam {
+            action: text(&m["action"]).expect("an action"),
+            join: text(&m["join"]),
+        },
         "notify" => Message::Notify {
             title: text(&m["title"])?,
             body: text(&m["body"])?,

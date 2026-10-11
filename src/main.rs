@@ -37,6 +37,7 @@ mod discord;
 mod downloads;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod handoff;
+mod joining;
 // The keys are WebView2's to hand over (webview2.rs).
 #[cfg_attr(not(windows), allow(dead_code))]
 mod keys;
@@ -101,6 +102,7 @@ fn listen_to_the_site(
     steam: Option<Arc<steam::Steam>>,
     microsoft: Option<Arc<microsoft::Microsoft>>,
     discord: Option<Arc<discord::Discord>>,
+    joining: Arc<joining::Joining>,
 ) {
     let (window, site) = (window.clone(), site.clone());
     app.listen_any(bridge::EVENT, move |event| {
@@ -117,6 +119,9 @@ fn listen_to_the_site(
                     discord.show_presence(Some(&page));
                     discord.page_shown();
                 }
+                // A room a friend asked the player into before the site was
+                // showing -- the launch to join it -- is opened now.
+                joining.page_shown();
             }
             Some(bridge::Message::Unread { count }) => badge::show(&window, count),
             Some(bridge::Message::Theme(theme)) => {
@@ -139,6 +144,12 @@ fn listen_to_the_site(
                 let asked = discord::Asked::from(&action, user.as_deref());
                 if let (Some(discord), Some(asked)) = (&discord, asked) {
                     discord.asked(asked);
+                }
+            }
+            // Only the Steam build's page offers Steam's invitation.
+            Some(bridge::Message::Steam { action, join }) => {
+                if let (Some(steam), "invite", Some(join)) = (&steam, action.as_str(), join) {
+                    steam::invite(steam, &join);
                 }
             }
             // The page asks this app only for Steam's sign-in, and only where
@@ -214,7 +225,11 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
             let _ = window.set_title(if title.is_empty() { "Oeee Cafe" } else { title });
         });
     let builder = chrome::prepare(builder).initialization_script(bridge::SCRIPT);
-    let discord = discord::start(app.handle(), site, steam::app_id(steam));
+    // A friend's way into a room, from Discord or Steam; and from a second
+    // launch, which hands its arguments to the one running (main).
+    let joining = Arc::new(joining::Joining::new(app.handle(), site));
+    app.manage(joining.clone());
+    let discord = discord::start(site, steam::app_id(steam), joining.clone());
     let builder = browsing_off_the_site(builder, steam.clone(), discord.clone(), site);
     let window = navigation::prepare(builder, app.handle(), site).build()?;
 
@@ -228,8 +243,15 @@ fn setup(app: &mut App, site: &Url, steam: &Option<Arc<steam::Steam>>) -> tauri:
         steam.clone(),
         microsoft.clone(),
         discord,
+        joining.clone(),
     );
     steam::watch_dlc(app.handle(), steam);
+    steam::watch_joins(steam, joining.clone());
+    // Steam starts the app with a friend's room on its command line when the
+    // player joins them, or accepts their invitation, and it is not running.
+    if let Some(path) = joining::room_in_args(std::env::args().skip(1)) {
+        joining.join(path);
+    }
     chrome::paint_background(&window);
 
     #[cfg(windows)]
@@ -253,11 +275,19 @@ fn main() {
     tauri::Builder::default()
         // First, as the plugin asks: a second launch hands over here and
         // exits, and the window already open comes forward.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // Opening oeee-cafe://... while the app is running is a second
             // launch carrying it on Windows, so this is also how a sign-in
             // comes back (handoff.rs).
             handoff::returned(app);
+            // And a launch Steam made to join a friend's room, should it make
+            // one while the app runs rather than tell it (steam.rs).
+            if let (Some(path), Some(joining)) = (
+                joining::room_in_args(args.into_iter().skip(1)),
+                app.try_state::<Arc<joining::Joining>>(),
+            ) {
+                joining.join(path);
+            }
         }))
         // Where the window was, how big, and whether it was maximised or full
         // screen -- and not its decorations or visibility, which are the

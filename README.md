@@ -164,6 +164,24 @@ that says nothing is browsing, and so is the bundled loader. Upload `steam/rich_
 (Community > Rich Presence Localization) whenever it changes; a token the
 app sets that Steam has not been given shows nothing.
 
+## Inviting Steam friends
+
+In a collaborative room a friend could enter, the page's `join` -- the room's
+path -- is also the rich presence's `connect` key, so friends who own Oeee
+Cafe on Steam see Join Game on the player in their friends list. The room's
+Steam button (`SessionHeader.tsx` in oeee-cafe/web), shown only in the Steam
+build, sends `steam` with "invite" and the path on the bridge, and the app
+opens Steam's own invitation over the window
+(`ActivateGameOverlayInviteDialogConnectString`): Steam lists the friends and
+sends it, and nothing comes back to the page. A friend who joins or accepts
+has the path handed to their app -- by `GameRichPresenceJoinRequested_t`
+while it runs, which `src/steam/client.rs` reads itself since the crate's
+panics on a string that is not UTF-8, or on its command line when Steam
+starts it -- and the window opens the room once it shows the site
+(`src/joining.rs`, which Discord's invitations go through too). Only a
+room's path is ever followed. Friends who do not own the app cannot join this
+way; Discord's invitations and the room's link are for them.
+
 ## Discord
 
 The same `page` message goes to Discord too, through its Social SDK

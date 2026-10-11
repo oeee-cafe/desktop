@@ -13,17 +13,18 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use tauri::{AppHandle, Manager};
+use tauri::Manager;
 use url::Url;
 
 use super::linking::{self, Refused, Tokens};
 use super::{
-    friends_script, invited_script, launch_command, room_path, shown, state_script, Asked, Friend,
-    Linked, Shown, APPLICATION_ID,
+    friends_script, invited_script, launch_command, shown, state_script, Asked, Friend, Linked,
+    Shown, APPLICATION_ID,
 };
 use crate::bridge::Page;
+use crate::joining::{room_path, Joining};
 use crate::words;
-use crate::{site, WINDOW};
+use crate::WINDOW;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -132,16 +133,6 @@ pub struct Discord {
     linked: Arc<Mutex<Linked>>,
 }
 
-/// A friend's way into a room, and where to take them.
-struct Joining {
-    app: AppHandle,
-    site: Url,
-    /// A room the window could not be sent to yet, because it was not
-    /// showing the site -- or not there at all -- at a launch Discord made
-    /// to join it.
-    waiting: Mutex<Option<String>>,
-}
-
 /// What the SDK's thread hands back to itself through shim.cpp.
 struct Context {
     joining: Arc<Joining>,
@@ -152,12 +143,8 @@ struct Context {
 
 /// Starts Discord's SDK on a thread of its own. `steam_app` is the app's
 /// own id when Steam started it, which Discord then launches it through.
-pub fn start(app: &AppHandle, site: &Url, steam_app: Option<u32>) -> Option<Arc<Discord>> {
-    let joining = Arc::new(Joining {
-        app: app.clone(),
-        site: site.clone(),
-        waiting: Mutex::default(),
-    });
+/// `joining` takes a friend into the room their join secret names.
+pub fn start(site: &Url, steam_app: Option<u32>, joining: Arc<Joining>) -> Option<Arc<Discord>> {
     let linked = Arc::new(Mutex::new(Linked::default()));
     let (tell, told) = mpsc::channel();
     let context = Context {
@@ -448,7 +435,7 @@ impl Thread {
 
     fn eval(&self, script: &str) {
         let joining = unsafe { &(*self.context).joining };
-        if let Some(window) = joining.app.get_webview_window(WINDOW) {
+        if let Some(window) = joining.app().get_webview_window(WINDOW) {
             let _ = window.eval(script);
         }
     }
@@ -541,36 +528,6 @@ extern "C" fn joined(context: *mut c_void, secret: OeeeText) {
     joining.join(path);
 }
 
-impl Joining {
-    fn join(&self, path: String) {
-        let window = self.app.get_webview_window(WINDOW);
-        if let Some(window) = &window {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
-        let on_site = window
-            .and_then(|window| window.url().ok())
-            .is_some_and(|page| site::is_site(&page, &self.site));
-        if on_site {
-            self.go(&path);
-        } else {
-            *self.waiting.lock().unwrap() = Some(path);
-        }
-    }
-
-    /// As a link in the page goes, so a drawing in progress is asked about
-    /// first.
-    fn go(&self, path: &str) {
-        let (Some(window), Ok(url)) = (self.app.get_webview_window(WINDOW), self.site.join(path))
-        else {
-            return;
-        };
-        let url = serde_json::to_string(url.as_str()).unwrap_or_default();
-        let _ = window.eval(format!("location.assign({url});"));
-    }
-}
-
 impl Discord {
     /// Tells Discord what the page says the player is doing, or that they
     /// are browsing when there is no page of the site to say.
@@ -583,16 +540,12 @@ impl Discord {
     }
 
     /// A page of the site is showing and speaking: it is told where the
-    /// player's account stands, and the room a friend was asked into before
-    /// it was can be opened now.
+    /// player's account stands. A room a friend was asked into before it was
+    /// is opened by main.rs, for Steam's friends as well.
     pub fn page_shown(&self) {
         let script = state_script(&self.linked.lock().unwrap());
-        if let Some(window) = self.joining.app.get_webview_window(WINDOW) {
+        if let Some(window) = self.joining.app().get_webview_window(WINDOW) {
             let _ = window.eval(&script);
-        }
-        let waiting = self.joining.waiting.lock().unwrap().take();
-        if let Some(path) = waiting {
-            self.joining.go(&path);
         }
     }
 

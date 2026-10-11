@@ -1,6 +1,6 @@
 //! Steam, when Steam started the app.
 //!
-//! Three things are asked of it. What the player is doing, for their friends
+//! Four things are asked of it. What the player is doing, for their friends
 //! list: the site says it in each `page` message it sends the app (bridge.rs;
 //! `src/web/presence.rs` in oeee-cafe/web), and the app hands it to Steam as
 //! rich presence, in the words of `steam/rich_presence.vdf`.
@@ -27,6 +27,15 @@
 //! which, from where they are), and answers `oeeeApp.store.prices` with
 //! Steam's own formatting of it.
 //!
+//! And in a collaborative room a friend could enter, Steam's way in: the
+//! room's path as the `connect` key of the rich presence, so friends see
+//! Join Game on the player, and the room's Steam button (SessionHeader.tsx)
+//! sends `steam` with "invite" on the bridge, which opens Steam's own
+//! invitation over the window. A friend who joins or accepts has their
+//! app handed the path -- told by Steam while it runs, on its command line
+//! when Steam starts it -- and it opens the room (joining.rs). Only friends
+//! who own Oeee Cafe on Steam can.
+//!
 //! Without Steam -- started from a terminal, or Steam not running, or the
 //! Microsoft Store's build, which has none -- the app is the same window
 //! onto the site it always was, and the page never asks. The site shows
@@ -46,6 +55,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
 use crate::bridge::Page;
+use crate::joining::{room_path, Joining};
 use crate::store::{self, quoted};
 use crate::WINDOW;
 
@@ -84,6 +94,14 @@ impl Steam {
     pub fn app_id(&self) -> u32 {
         match *self {}
     }
+
+    pub fn invite(&self, _connect: &str) {
+        match *self {}
+    }
+
+    pub fn on_join_requested(&self, _then: impl Fn(String) + Send + 'static) {
+        match *self {}
+    }
 }
 
 #[cfg(not(feature = "steam"))]
@@ -94,7 +112,7 @@ pub fn start() -> Option<std::sync::Arc<Steam>> {
 /// The rich presence keys for what a page says, every key given a value or
 /// cleared so nothing from the page before is left behind. `steam_display` is
 /// a token of `steam/rich_presence.vdf`; `community` fills its `%community%`.
-fn rich_presence(page: Option<&Page>) -> [(&'static str, Option<String>); 3] {
+fn rich_presence(page: Option<&Page>) -> [(&'static str, Option<String>); 4] {
     let activity = page.and_then(|p| p.presence.as_deref()).unwrap_or("");
     let community = page
         .and_then(|p| p.community.as_deref())
@@ -119,10 +137,17 @@ fn rich_presence(page: Option<&Page>) -> [(&'static str, Option<String>); 3] {
         None => format!("#{token}"),
     };
     let group = group.filter(|_| activity == "collaborating");
+    // A room a friend could enter: Steam offers Join Game on the player in
+    // their friends' lists, and the overlay's invitation hands it over.
+    let connect = page
+        .filter(|_| activity == "collaborating")
+        .and_then(|p| p.join.as_deref())
+        .and_then(room_path);
     [
         ("steam_display", Some(display)),
         ("community", community),
         ("steam_player_group", group),
+        ("connect", connect),
     ]
 }
 
@@ -196,6 +221,33 @@ pub fn watch_dlc(app: &AppHandle, steam: &Option<Arc<Steam>>) {
             Err(error) => eprintln!("a DLC was installed, but no Steam ticket: {error}"),
         });
     });
+}
+
+/// Takes the player into the room a Steam friend asked them into, or that
+/// they joined from their friends list, while the app is running: Steam
+/// hands over the friend's connect string, which is only ever a room's
+/// path here (`rich_presence`), and anything else is not followed. A launch
+/// to join, when the app was not running, carries it on the command line
+/// instead (main.rs).
+pub fn watch_joins(steam: &Option<Arc<Steam>>, joining: Arc<Joining>) {
+    let Some(steam) = steam else {
+        return;
+    };
+    steam.on_join_requested(move |connect| match room_path(&connect) {
+        Some(path) => joining.join(path),
+        None => eprintln!("Steam gave a connect string that is not a room"),
+    });
+}
+
+/// Opens Steam's own invitation over the window, for the room `join` opens
+/// (`steam` on the bridge, bridge.rs): Steam lists the player's friends and
+/// sends it, and a friend who accepts has Steam open their own app on it.
+/// The page names the room by its path, and anything else is not offered.
+pub fn invite(steam: &Steam, join: &str) {
+    match room_path(join) {
+        Some(path) => steam.invite(&path),
+        None => eprintln!("not a room to invite Steam friends into: {join:?}"),
+    }
 }
 
 /// Gets a ticket from Steam and answers the page's sign-in with it, or with
@@ -378,6 +430,7 @@ mod tests {
                 ("steam_display", Some("#DrawingIn".to_string())),
                 ("community", Some("오이카페 모에화".to_string())),
                 ("steam_player_group", None),
+                ("connect", None),
             ]
         );
         assert_eq!(
@@ -393,8 +446,33 @@ mod tests {
                 ("steam_display", Some("#Collaborating".to_string())),
                 ("community", None),
                 ("steam_player_group", Some("0123abcd".to_string())),
+                ("connect", None),
             ]
         );
+    }
+
+    #[test]
+    fn a_room_a_friend_could_enter_is_one_they_can_join() {
+        const ROOM: &str = "/collaborate/9c881320-2b43-4afa-b2bb-7128c8a3e985";
+        let room = Page {
+            join: Some(ROOM.to_string()),
+            ..page("collaborating", None, Some("0123abcd"))
+        };
+        assert_eq!(
+            rich_presence(Some(&room))[3],
+            ("connect", Some(ROOM.to_string()))
+        );
+        // Only a room's path, and only while in the room.
+        let elsewhere = Page {
+            join: Some("/settings".to_string()),
+            ..page("collaborating", None, Some("0123abcd"))
+        };
+        assert_eq!(rich_presence(Some(&elsewhere))[3], ("connect", None));
+        let drawing = Page {
+            join: Some(ROOM.to_string()),
+            ..page("drawing", None, None)
+        };
+        assert_eq!(rich_presence(Some(&drawing))[3], ("connect", None));
     }
 
     #[test]
@@ -406,6 +484,7 @@ mod tests {
                     ("steam_display", Some("#Browsing".to_string())),
                     ("community", None),
                     ("steam_player_group", None),
+                    ("connect", None),
                 ]
             );
         }

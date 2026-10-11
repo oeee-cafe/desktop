@@ -15,7 +15,7 @@
 //! in the Steam build, through `oeee-cafe://` otherwise -- and the app, told
 //! the secret, opens the room. Everything past that is the site's: whether
 //! they are signed in, whether the room has a seat, whether they may enter
-//! it. Only a path into a room is ever opened ([`room_path`]): the secret
+//! it (joining.rs). Only a path into a room is ever opened ([`room_path`]): the secret
 //! comes from someone else's app.
 //!
 //! The Social SDK talks to the Discord app on the same computer, without the
@@ -36,6 +36,7 @@
 #![cfg_attr(not(feature = "discord"), allow(dead_code))]
 
 use crate::bridge::Page;
+use crate::joining::room_path;
 use crate::words::Words;
 
 #[cfg(feature = "discord")]
@@ -66,9 +67,9 @@ impl Discord {
 
 #[cfg(not(feature = "discord"))]
 pub fn start(
-    _app: &tauri::AppHandle,
     _site: &url::Url,
     _steam_app: Option<u32>,
+    _joining: std::sync::Arc<crate::joining::Joining>,
 ) -> Option<std::sync::Arc<Discord>> {
     None
 }
@@ -155,24 +156,6 @@ fn room(page: &Page) -> Option<Room> {
         size,
         seats,
     })
-}
-
-/// The path into a collaborative room that `secret` names, or none for
-/// anything else: a join secret is another player's app's word, and the
-/// window opens nothing on the site but a room by it.
-pub fn room_path(secret: &str) -> Option<String> {
-    let id = secret.strip_prefix("/collaborate/")?;
-    is_uuid(id).then(|| format!("/collaborate/{id}"))
-}
-
-/// Whether `id` is a UUID as the site writes one: lowercase hex in groups
-/// of 8, 4, 4, 4 and 12.
-fn is_uuid(id: &str) -> bool {
-    id.len() == 36
-        && id.char_indices().all(|(i, c)| match i {
-            8 | 13 | 18 | 23 => c == '-',
-            _ => c.is_ascii_digit() || ('a'..='f').contains(&c),
-        })
 }
 
 /// The longest Discord takes each field, in bytes.
@@ -401,25 +384,6 @@ mod tests {
         let shown = shown(Some(&page), &Words::default());
         assert_eq!(shown.details, "Drawing together");
         assert_eq!(shown.room, None);
-    }
-
-    #[test]
-    fn only_a_room_is_ever_joined() {
-        assert_eq!(room_path(ROOM).as_deref(), Some(ROOM));
-        for secret in [
-            "",
-            "/collaborate/",
-            "/collaborate/9C881320-2B43-4AFA-B2BB-7128C8A3E985",
-            "/collaborate/9c881320-2b43-4afa-b2bb-7128c8a3e98",
-            "/collaborate/9c881320-2b43-4afa-b2bb-7128c8a3e985/ws",
-            "/collaborate/9c881320-2b43-4afa-b2bb-7128c8a3e985?x",
-            "/collaborate/../logout/2b43-4afa-b2bb-7128c8a3e98",
-            "https://example.com/collaborate/9c881320-2b43-4afa-b2bb-7128c8a3e985",
-            "//example.com/collaborate/9c881320-2b43-4afa-b2bb-7128c8a3e985",
-            "/settings",
-        ] {
-            assert_eq!(room_path(secret), None, "{secret}");
-        }
     }
 
     #[test]
