@@ -206,9 +206,19 @@ void oeee_discord_show(const OeeeActivity* activity)
                                                | static_cast<int>(P::IOS)
                                                | static_cast<int>(P::Android)));
     }
-    client->UpdateRichPresence(std::move(a), [](discordpp::ClientResult result) {
+    // What was offered, for the log: whether friends could be asked in is
+    // the party and its secret, and room left in it.
+    std::string offered = text(activity->details);
+    if (activity->party.len > 0) {
+        offered += ", party " + std::to_string(activity->size) + " of "
+          + std::to_string(activity->seats)
+          + (activity->join.len > 0 ? ", joinable" : ", no join secret");
+    } else {
+        offered += ", no party";
+    }
+    client->UpdateRichPresence(std::move(a), [offered](discordpp::ClientResult result) {
         if (result.Successful()) {
-            std::fprintf(stderr, "Discord: activity shown\n");
+            std::fprintf(stderr, "Discord: activity shown: %s\n", offered.c_str());
         } else {
             std::fprintf(stderr, "Discord: %s\n", result.ToString().c_str());
         }
