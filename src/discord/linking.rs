@@ -30,10 +30,12 @@ pub struct Tokens {
 /// Why no tokens came back.
 #[derive(Debug)]
 pub enum Refused {
-    /// The site or Discord said no: the code or refresh token is no good,
-    /// and asking again with it will not help.
+    /// Discord said no, through the site: the code or refresh token is no
+    /// good, and asking again with it will not help.
     No,
-    /// Nobody answered, or not sensibly: worth asking again later.
+    /// Nobody answered, or not sensibly, or not now -- the site too busy or
+    /// not itself, or something in front of it saying no for it: worth
+    /// asking again later.
     Unreachable(String),
 }
 
@@ -82,14 +84,37 @@ fn ask(site: &Url, path: &str, body: serde_json::Value) -> Result<Tokens, Refuse
     let url = site
         .join(path)
         .map_err(|error| Refused::Unreachable(error.to_string()))?;
-    match agent().post(url.as_str()).send_json(body) {
-        Ok(mut response) => response
+    let mut response = agent()
+        .post(url.as_str())
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send_json(body)
+        .map_err(|error| Refused::Unreachable(error.to_string()))?;
+    let status = response.status().as_u16();
+    if (200..300).contains(&status) {
+        return response
             .body_mut()
             .read_json::<Tokens>()
-            .map_err(|error| Refused::Unreachable(error.to_string())),
-        Err(ureq::Error::StatusCode(400 | 401 | 403)) => Err(Refused::No),
-        Err(error) => Err(Refused::Unreachable(error.to_string())),
+            .map_err(|error| Refused::Unreachable(error.to_string()));
     }
+    let said = response.body_mut().read_to_string().unwrap_or_default();
+    if refused(status, &said) {
+        Err(Refused::No)
+    } else {
+        Err(Refused::Unreachable(format!("{status}: {said}")))
+    }
+}
+
+/// Whether the site's answer is Discord's no to the grant itself, the one
+/// answer that means the code or refresh token will never be any good, and
+/// a kept account is forgotten for it. The site says it with a 400 and its
+/// own words for it, or passes on Discord's `invalid_grant`. Anything else
+/// -- 429 for too many asks, the site down, a proxy's 401 or 403 in front
+/// of it, a 404 from a site with no Discord to trade with -- says nothing of
+/// the grant, and is asked again later.
+fn refused(status: u16, said: &str) -> bool {
+    status == 400 && (said.contains("Discord would not trade") || said.contains("invalid_grant"))
 }
 
 fn agent() -> ureq::Agent {
@@ -107,20 +132,39 @@ fn agent() -> ureq::Agent {
 
 pub use kept::{forget, keep, kept};
 
+/// The credential's name for `site`, as Credential Manager lists it: the
+/// name it has always had for oeee.cafe, and the site's origin after it for
+/// any other a development build is pointed at (`OEEE_CAFE_URL`), so that
+/// the account connected through one site is never sent to another.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn target(site: &Url) -> String {
+    const TARGET: &str = "cafe.oeee/discord";
+    if crate::site::is_production(site) {
+        TARGET.to_string()
+    } else {
+        format!("{TARGET}@{}", site.origin().ascii_serialization())
+    }
+}
+
 /// The refresh token in Windows's Credential Manager.
 #[cfg(windows)]
 mod kept {
+    use url::Url;
     use windows::core::{HSTRING, PCWSTR, PWSTR};
     use windows::Win32::Security::Credentials::{
         CredDeleteW, CredFree, CredReadW, CredWriteW, CREDENTIALW, CRED_FLAGS,
         CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
     };
 
-    /// The credential's name, as Credential Manager lists it.
-    const TARGET: &str = "cafe.oeee/discord";
+    use super::target;
 
-    pub fn keep(refresh_token: &str) {
-        let target = HSTRING::from(TARGET);
+    /// Keeps `refresh_token` for `site`. An empty one is no token, and would
+    /// only be read back as none.
+    pub fn keep(site: &Url, refresh_token: &str) {
+        if refresh_token.is_empty() {
+            return;
+        }
+        let target = HSTRING::from(target(site));
         let mut blob = refresh_token.as_bytes().to_vec();
         let credential = CREDENTIALW {
             Flags: CRED_FLAGS(0),
@@ -138,37 +182,86 @@ mod kept {
         }
     }
 
-    pub fn kept() -> Option<String> {
-        let target = HSTRING::from(TARGET);
+    pub fn kept(site: &Url) -> Option<String> {
+        let target = HSTRING::from(target(site));
         let mut found: *mut CREDENTIALW = std::ptr::null_mut();
         unsafe {
             CredReadW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None, &mut found).ok()?;
             let credential = &*found;
-            let blob = std::slice::from_raw_parts(
-                credential.CredentialBlob,
-                credential.CredentialBlobSize as usize,
-            );
-            let token = String::from_utf8(blob.to_vec()).ok();
+            // A credential with no blob has a null pointer for it, which no
+            // slice may be made from, even an empty one.
+            let size = credential.CredentialBlobSize as usize;
+            let token = if credential.CredentialBlob.is_null() || size == 0 {
+                None
+            } else {
+                let blob = std::slice::from_raw_parts(credential.CredentialBlob, size);
+                String::from_utf8(blob.to_vec()).ok()
+            };
             CredFree(found.cast());
             token.filter(|token| !token.is_empty())
         }
     }
 
-    pub fn forget() {
-        let target = HSTRING::from(TARGET);
+    pub fn forget(site: &Url) {
+        let target = HSTRING::from(target(site));
         let _ = unsafe { CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None) };
     }
 }
 
-/// Anywhere else -- a developer's build -- nowhere: the player connects
-/// again each time the app starts.
+/// Anywhere else -- Linux, for now -- nowhere: the player connects again
+/// each time the app starts.
 #[cfg(not(windows))]
 mod kept {
-    pub fn keep(_refresh_token: &str) {}
+    use url::Url;
 
-    pub fn kept() -> Option<String> {
+    pub fn keep(_site: &Url, _refresh_token: &str) {}
+
+    pub fn kept(_site: &Url) -> Option<String> {
         None
     }
 
-    pub fn forget() {}
+    pub fn forget(_site: &Url) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_discords_no_to_the_grant_forgets_it() {
+        let site_said =
+            r#"{"error":{"code":"VALIDATION_ERROR","message":"Discord would not trade that"}}"#;
+        assert!(refused(400, site_said));
+        assert!(refused(400, r#"{"error":"invalid_grant"}"#));
+        for (status, said) in [
+            (400, "Bad Request"),
+            (401, r#"{"error":"invalid_grant"}"#),
+            (403, "Forbidden"),
+            (404, "Discord not found"),
+            (429, "Too Many Requests"),
+            (500, "Something went wrong"),
+            (502, "Bad Gateway"),
+            (503, site_said),
+        ] {
+            assert!(!refused(status, said), "{status} {said}");
+        }
+    }
+
+    #[test]
+    fn the_account_is_kept_by_the_site_it_was_connected_through() {
+        let target = |site: &str| target(&Url::parse(site).unwrap());
+        assert_eq!(target("https://oeee.cafe/"), "cafe.oeee/discord");
+        assert_eq!(
+            target("https://oeee.test/"),
+            "cafe.oeee/discord@https://oeee.test"
+        );
+        assert_eq!(
+            target("http://127.0.0.1:8765/"),
+            "cafe.oeee/discord@http://127.0.0.1:8765"
+        );
+        assert_eq!(
+            target("http://oeee.cafe/"),
+            "cafe.oeee/discord@http://oeee.cafe"
+        );
+    }
 }

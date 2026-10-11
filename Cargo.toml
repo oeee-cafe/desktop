@@ -77,10 +77,10 @@ windows = { version = "0.61", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 
-# Elsewhere -- a developer's build on macOS, since only Windows ships -- over
-# rustls, ureq's own default.
+# Elsewhere -- Linux -- over rustls, ureq's own default, and with `json` for
+# the Discord account's tokens as on Windows.
 [target.'cfg(not(windows))'.dependencies]
-ureq = { version = "3", optional = true }
+ureq = { version = "3", optional = true, features = ["json"] }
 
 [profile.release]
 codegen-units = 1

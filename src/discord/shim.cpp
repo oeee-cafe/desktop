@@ -13,7 +13,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <memory>
 #include <string>
 
 extern "C" {
@@ -46,11 +45,18 @@ struct OeeeCallbacks {
     // The player said yes in Discord's consent screen, or did not: a code
     // for the site to trade (src/discord.rs in oeee-cafe/web), the redirect
     // it was given for, and the PKCE verifier it was asked with. All empty
-    // for no.
-    void (*authorized)(void* context, OeeeText code, OeeeText redirect, OeeeText verifier);
-    // The connection's state: discordpp::Client::Status, or -1 for a token
-    // Discord would not take.
-    void (*status)(void* context, int32_t status);
+    // for no. `generation` is the one oeee_discord_authorize was given.
+    void (*authorized)(void* context,
+                       uint64_t generation,
+                       OeeeText code,
+                       OeeeText redirect,
+                       OeeeText verifier);
+    // Whether the SDK took the access token oeee_discord_update_token gave
+    // it, with the generation it was given.
+    void (*token)(void* context, uint64_t generation, bool taken);
+    // The connection's state, discordpp::Client::Status, and when it ended,
+    // why: discordpp::Client::Error and the gateway's close code.
+    void (*status)(void* context, int32_t status, int32_t error, int32_t detail);
     // Something about the player's friends changed.
     void (*people)(void* context);
     // Whether an invitation reached `user`.
@@ -68,7 +74,11 @@ typedef void (*OeeePerson)(void* data, uint64_t id, OeeeText name, int32_t statu
 
 namespace {
 
-std::unique_ptr<discordpp::Client> client;
+// Never deleted, on purpose. The thread that calls the SDK is still running
+// it when the app exits, and a static unique_ptr's destructor, run by the C
+// runtime on the way out, would tear the client down under a RunCallbacks
+// on that thread. The process is ending; the system takes it back.
+discordpp::Client* client = nullptr;
 uint64_t application = 0;
 void* context = nullptr;
 OeeeCallbacks said{};
@@ -99,7 +109,7 @@ void oeee_discord_start(uint64_t app,
     application = app;
     context = ctx;
     said = *callbacks;
-    client = std::make_unique<discordpp::Client>();
+    client = new discordpp::Client();
     // What the SDK says of itself, beside the app's own output: warnings
     // and worse, or everything with OEEE_CAFE_DISCORD_LOG set.
     client->AddLogCallback(
@@ -118,8 +128,18 @@ void oeee_discord_start(uint64_t app,
     client->SetActivityJoinCallback(
       [](std::string secret) { said.joined(context, of(secret)); });
     client->SetStatusChangedCallback(
-      [](discordpp::Client::Status status, discordpp::Client::Error, int32_t) {
-          said.status(context, static_cast<int32_t>(status));
+      [](discordpp::Client::Status status, discordpp::Client::Error error, int32_t detail) {
+          if (error != discordpp::Client::Error::None) {
+              std::fprintf(stderr,
+                           "Discord: %s: %s (%d)\n",
+                           discordpp::Client::StatusToString(status).c_str(),
+                           discordpp::Client::ErrorToString(error).c_str(),
+                           static_cast<int>(detail));
+          }
+          said.status(context,
+                      static_cast<int32_t>(status),
+                      static_cast<int32_t>(error),
+                      detail);
       });
     client->SetRelationshipCreatedCallback([](uint64_t, bool) { said.people(context); });
     client->SetRelationshipDeletedCallback([](uint64_t, bool) { said.people(context); });
@@ -177,8 +197,10 @@ void oeee_discord_show(const OeeeActivity* activity)
 // Asks the player, in Discord's overlay or their browser, to let the app see
 // their friends and invite them: the presence scopes, which are those. The
 // code that comes back is traded by the site, which holds the client
-// secret; the SDK's own GetToken is for public clients only.
-void oeee_discord_authorize()
+// secret; the SDK's own GetToken is for public clients only. `generation`
+// comes back with the answer, so discord.rs can tell an answer it stopped
+// waiting for.
+void oeee_discord_authorize(uint64_t generation)
 {
     if (!client) {
         return;
@@ -191,34 +213,44 @@ void oeee_discord_authorize()
     std::string kept = verifier.Verifier();
     client->Authorize(
       std::move(args),
-      [kept](discordpp::ClientResult result, std::string code, std::string redirect) {
+      [kept, generation](
+        discordpp::ClientResult result, std::string code, std::string redirect) {
           if (!result.Successful()) {
               std::fprintf(stderr, "Discord: not authorized: %s\n", result.ToString().c_str());
-              said.authorized(context, OeeeText{}, OeeeText{}, OeeeText{});
+              said.authorized(context, generation, OeeeText{}, OeeeText{}, OeeeText{});
               return;
           }
-          said.authorized(context, of(code), of(redirect), of(kept));
+          said.authorized(context, generation, of(code), of(redirect), of(kept));
       });
 }
 
-// Connects as the player whose access token this is.
-void oeee_discord_connect(OeeeText access_token)
+// Gives the SDK the player's access token: a new one for a client already
+// connected, which it goes on with, or the one to connect by next. Whether
+// it took it comes back with `generation`, and discord.rs decides whether
+// to connect -- by then the player may have asked to disconnect.
+void oeee_discord_update_token(uint64_t generation, OeeeText access_token)
 {
     if (!client) {
         return;
     }
     client->UpdateToken(discordpp::AuthorizationTokenType::Bearer,
                         text(access_token),
-                        [](discordpp::ClientResult result) {
+                        [generation](discordpp::ClientResult result) {
                             if (!result.Successful()) {
                                 std::fprintf(stderr,
                                              "Discord: token not taken: %s\n",
                                              result.ToString().c_str());
-                                said.status(context, -1);
-                                return;
                             }
-                            client->Connect();
+                            said.token(context, generation, result.Successful());
                         });
+}
+
+// Connects as the player whose access token the SDK last took.
+void oeee_discord_connect()
+{
+    if (client) {
+        client->Connect();
+    }
 }
 
 // Lets go of the player's account. The activity goes on by the Discord app

@@ -66,8 +66,9 @@ struct OeeeActivity {
 struct OeeeCallbacks {
     joined: extern "C" fn(*mut c_void, OeeeText),
     shown: extern "C" fn(*mut c_void, bool),
-    authorized: extern "C" fn(*mut c_void, OeeeText, OeeeText, OeeeText),
-    status: extern "C" fn(*mut c_void, i32),
+    authorized: extern "C" fn(*mut c_void, u64, OeeeText, OeeeText, OeeeText),
+    token: extern "C" fn(*mut c_void, u64, bool),
+    status: extern "C" fn(*mut c_void, i32, i32, i32),
     people: extern "C" fn(*mut c_void),
     invited: extern "C" fn(*mut c_void, u64, bool),
     expiring: extern "C" fn(*mut c_void),
@@ -84,8 +85,9 @@ extern "C" {
         callbacks: *const OeeeCallbacks,
     );
     fn oeee_discord_show(activity: *const OeeeActivity);
-    fn oeee_discord_authorize();
-    fn oeee_discord_connect(access_token: OeeeText);
+    fn oeee_discord_authorize(generation: u64);
+    fn oeee_discord_update_token(generation: u64, access_token: OeeeText);
+    fn oeee_discord_connect();
     fn oeee_discord_disconnect();
     fn oeee_discord_me(each: Person, data: *mut c_void);
     fn oeee_discord_friends(each: Person, data: *mut c_void);
@@ -100,6 +102,24 @@ const TICK: Duration = Duration::from_millis(100);
 /// running yet, most likely -- is offered again.
 const RETRY: Duration = Duration::from_secs(15);
 
+/// How long before an activity Discord did take is offered again all the
+/// same, while it is the Discord app beside this one showing it rather than
+/// the player's connected account. Nothing says when that app is quit and
+/// started again, which forgets the activity, so the app asks now and then:
+/// taken, nothing changes; not, it is offered every [`RETRY`] until it is.
+const REOFFER: Duration = Duration::from_secs(2 * 60);
+
+/// How long connecting may take -- Discord's consent screen open, the site
+/// trading the code, the SDK connecting -- before the page is told it is
+/// not happening. A consent screen closed without an answer is never
+/// answered at all.
+const CONNECTING: Duration = Duration::from_secs(5 * 60);
+
+/// How long after the site could not be asked for tokens it is asked again,
+/// doubling each time it still cannot be, up to [`RETRY_TOKENS_MOST`].
+const RETRY_TOKENS: Duration = Duration::from_secs(30);
+const RETRY_TOKENS_MOST: Duration = Duration::from_secs(60 * 60);
+
 /// How long after the page last asked for friends it is still sent them as
 /// they change: about as long as a picker stays open.
 const FRIENDS_WANTED: Duration = Duration::from_secs(5 * 60);
@@ -113,15 +133,27 @@ const READY: i32 = 3;
 /// Its Client::Status for not connected at all.
 const DISCONNECTED: i32 = 0;
 
+/// The gateway's close code for an access token it would not take: run out,
+/// most likely, while the computer slept through the SDK's warning.
+const AUTHENTICATION_FAILED: i32 = 4004;
+
 /// What the SDK's thread is told, by the rest of the app, by the threads
 /// asking the site, and by the SDK's own callbacks.
+///
+/// What answers something the thread asked carries the generation it was
+/// asked in ([`Thread::generation`]), and is only listened to in the same
+/// one.
 enum Told {
     Show(Shown),
     Asked(Asked),
     /// The consent screen's code, its redirect and the verifier, or none.
-    Authorized(Option<(String, String, String)>),
-    Tokens(Result<Tokens, Refused>),
-    Status(i32),
+    Authorized(u64, Option<(String, String, String)>),
+    Tokens(u64, Result<Tokens, Refused>),
+    /// Whether the SDK took the access token it was given.
+    TokenTaken(u64, bool),
+    /// The SDK's Client::Status, and when it ended, its Client::Error and
+    /// the gateway's close code.
+    Status(i32, i32, i32),
     People,
     Invited(u64, bool),
     Expiring,
@@ -165,6 +197,12 @@ pub fn start(site: &Url, steam_app: Option<u32>, joining: Arc<Joining>) -> Optio
                 offered: Instant::now(),
                 status: DISCONNECTED,
                 refresh_token: None,
+                generation: 0,
+                asking: false,
+                ask_again: None,
+                ask_again_after: RETRY_TOKENS,
+                refreshed_for_failure: false,
+                connecting_since: None,
                 letting_go: false,
                 friends_wanted: None,
                 people_changed: None,
@@ -191,9 +229,27 @@ struct Thread {
     offered: Instant,
     /// The SDK's Client::Status, as it last said.
     status: i32,
-    /// The account's refresh token while it is connected, kept for
-    /// refreshing and for letting it go.
+    /// The account's refresh token while it is connected, or kept and not
+    /// yet traded, kept for refreshing and for letting it go.
     refresh_token: Option<String>,
+    /// Counted up whenever the player starts connecting or disconnects, so
+    /// that an answer to something asked before -- tokens the site took its
+    /// time over, a consent screen left open -- is not taken for one to
+    /// now, and does not connect an account the player let go.
+    generation: u64,
+    /// The site is being asked for tokens. A refresh token works once, and
+    /// asking with it twice at once would have the second ask refused and
+    /// the account forgotten for it.
+    asking: bool,
+    /// When to ask the site again for the tokens it could not be asked for,
+    /// and how long to wait the time after that.
+    ask_again: Option<Instant>,
+    ask_again_after: Duration,
+    /// The gateway turned the access token away, and a new one was asked
+    /// for: once, until the account is connected again.
+    refreshed_for_failure: bool,
+    /// Since when the page has been told the account is connecting.
+    connecting_since: Option<Instant>,
     /// The player asked to disconnect, so the SDK's going quiet is that.
     letting_go: bool,
     friends_wanted: Option<Instant>,
@@ -210,6 +266,7 @@ impl Thread {
             joined,
             shown: shown_back,
             authorized,
+            token: token_taken,
             status: status_changed,
             people,
             invited,
@@ -226,10 +283,8 @@ impl Thread {
         }
 
         // An account connected before, kept on this computer.
-        if let Some(refresh_token) = linking::kept() {
-            self.set(|linked| linked.connecting = true);
-            self.refresh(refresh_token);
-        }
+        self.refresh_token = linking::kept(&self.site);
+        self.refresh();
 
         loop {
             match told.recv_timeout(TICK) {
@@ -240,7 +295,12 @@ impl Thread {
             unsafe { oeee_discord_tick() };
             // Discord started after the app, or went and came back.
             if let Some((shown, start)) = &self.current {
-                if !unsafe { (*self.context).taken } && self.offered.elapsed() >= RETRY {
+                let due = if unsafe { (*self.context).taken } {
+                    self.status != READY && self.offered.elapsed() >= REOFFER
+                } else {
+                    self.offered.elapsed() >= RETRY
+                };
+                if due {
                     let (shown, start) = (shown.clone(), *start);
                     self.show(&shown, start);
                 }
@@ -248,6 +308,16 @@ impl Thread {
             if self.people_changed.is_some_and(|at| at.elapsed() >= SETTLE) {
                 self.people_changed = None;
                 self.send_friends();
+            }
+            if self.ask_again.is_some_and(|at| Instant::now() >= at) {
+                self.ask_again = None;
+                self.refresh();
+            }
+            if self
+                .connecting_since
+                .is_some_and(|at| at.elapsed() >= CONNECTING)
+            {
+                self.stop_connecting();
             }
         }
     }
@@ -271,8 +341,17 @@ impl Thread {
             Told::Asked(Asked::Connect) => {
                 let linked = self.linked.lock().unwrap().clone();
                 if !linked.connected && !linked.connecting {
-                    self.set(|linked| linked.connecting = true);
-                    unsafe { oeee_discord_authorize() };
+                    self.generation += 1;
+                    self.ask_again = None;
+                    if self.refresh_token.is_some() {
+                        // Kept, and the site could not be asked, or the
+                        // gateway went away: no need for the consent
+                        // screen again.
+                        self.refresh();
+                    } else {
+                        self.set(|linked| linked.connecting = true);
+                        unsafe { oeee_discord_authorize(self.generation) };
+                    }
                 }
             }
             Told::Asked(Asked::Disconnect) => self.let_go(),
@@ -289,48 +368,78 @@ impl Thread {
                     self.eval(&invited_script(user, false));
                 }
             }
-            Told::Authorized(Some((code, redirect, verifier))) => {
-                let (site, tell) = (self.site.clone(), self.tell.clone());
+            // The player disconnected, or gave up waiting, while the consent
+            // screen was open: the code is never traded.
+            Told::Authorized(generation, _) if generation != self.generation => {}
+            Told::Authorized(_, Some((code, redirect, verifier))) => {
+                let (site, tell, generation) =
+                    (self.site.clone(), self.tell.clone(), self.generation);
+                self.asking = true;
                 std::thread::spawn(move || {
-                    let _ = tell.send(Told::Tokens(linking::trade(
-                        &site, &code, &redirect, &verifier,
-                    )));
+                    let tokens = linking::trade(&site, &code, &redirect, &verifier);
+                    let _ = tell.send(Told::Tokens(generation, tokens));
                 });
             }
-            Told::Authorized(None) => self.set(|linked| linked.connecting = false),
-            Told::Tokens(Ok(tokens)) => {
-                linking::keep(&tokens.refresh_token);
-                self.refresh_token = Some(tokens.refresh_token);
-                self.letting_go = false;
-                unsafe { oeee_discord_connect(OeeeText::of(&tokens.access_token)) };
-            }
-            Told::Tokens(Err(Refused::No)) => {
-                // The account was let go from Discord's side, or the code
-                // was stale: nothing kept is any use.
-                linking::forget();
-                self.refresh_token = None;
-                self.set(|linked| *linked = Linked::default());
-            }
-            Told::Tokens(Err(Refused::Unreachable(error))) => {
-                // Kept for the next start; for now, not connected.
-                eprintln!("Discord: the site could not be asked for tokens: {error}");
-                self.set(|linked| linked.connecting = false);
-            }
-            Told::Status(status) => self.status_changed(status),
-            Told::People => self.people_changed = Some(Instant::now()),
-            Told::Invited(user, sent) => self.eval(&invited_script(user, sent)),
-            Told::Expiring => {
-                if let Some(refresh_token) = self.refresh_token.take() {
-                    self.refresh(refresh_token);
+            Told::Authorized(_, None) => self.set(|linked| linked.connecting = false),
+            // Asked for before the player disconnected: the account is let
+            // go, these tokens with it, rather than left with Discord
+            // among the player's authorized apps and nowhere here.
+            Told::Tokens(generation, tokens) if generation != self.generation => {
+                if let Ok(Tokens { refresh_token, .. }) = tokens {
+                    self.revoke(refresh_token);
                 }
             }
+            Told::Tokens(_, Ok(tokens)) => {
+                self.asking = false;
+                self.ask_again_after = RETRY_TOKENS;
+                // The refresh token traded for these works no more.
+                linking::keep(&self.site, &tokens.refresh_token);
+                self.refresh_token = Some(tokens.refresh_token).filter(|t| !t.is_empty());
+                self.letting_go = false;
+                unsafe {
+                    oeee_discord_update_token(self.generation, OeeeText::of(&tokens.access_token))
+                };
+            }
+            Told::Tokens(_, Err(Refused::No)) => {
+                // The account was let go from Discord's side, or the code
+                // was stale: nothing kept is any use.
+                self.asking = false;
+                self.forget_account();
+            }
+            Told::Tokens(_, Err(Refused::Unreachable(error))) => {
+                // Kept, and asked for again in a while; for now, not
+                // connected, unless it still is on the token it has.
+                eprintln!("Discord: the site could not be asked for tokens: {error}");
+                self.asking = false;
+                if self.refresh_token.is_some() {
+                    self.ask_again = Some(Instant::now() + self.ask_again_after);
+                    self.ask_again_after = (self.ask_again_after * 2).min(RETRY_TOKENS_MOST);
+                }
+                self.set(|linked| linked.connecting = false);
+            }
+            Told::TokenTaken(generation, _) if generation != self.generation => {}
+            // Connected already, the SDK goes on with the new token; else
+            // it connects by it.
+            Told::TokenTaken(_, true) => {
+                if self.status == DISCONNECTED {
+                    unsafe { oeee_discord_connect() };
+                }
+            }
+            Told::TokenTaken(_, false) => self.forget_account(),
+            Told::Status(status, error, detail) => self.status_changed(status, error, detail),
+            Told::People => self.people_changed = Some(Instant::now()),
+            Told::Invited(user, sent) => self.eval(&invited_script(user, sent)),
+            // Kept until the new one comes, so that the account can still
+            // be let go, or asked for again, should the site not answer.
+            Told::Expiring => self.refresh(),
         }
     }
 
-    fn status_changed(&mut self, status: i32) {
+    fn status_changed(&mut self, status: i32, error: i32, detail: i32) {
         self.status = status;
         match status {
             READY => {
+                self.refreshed_for_failure = false;
                 let name = me();
                 self.set(|linked| {
                     *linked = Linked {
@@ -346,30 +455,54 @@ impl Thread {
                 }
                 self.send_friends();
             }
-            // A token Discord would not take.
-            -1 => {
-                linking::forget();
-                self.refresh_token = None;
-                self.set(|linked| *linked = Linked::default());
-            }
             DISCONNECTED if self.letting_go => {
                 self.letting_go = false;
                 self.set(|linked| *linked = Linked::default());
-                // The activity goes on by the Discord app beside this one.
-                if let Some((shown, start)) = self.current.clone() {
-                    self.show(&shown, start);
+            }
+            // The gateway turned the access token away: a new one, once,
+            // rather than the player having to connect again.
+            DISCONNECTED
+                if detail == AUTHENTICATION_FAILED
+                    && !self.refreshed_for_failure
+                    && self.refresh_token.is_some() =>
+            {
+                self.refreshed_for_failure = true;
+                self.set(|linked| linked.connected = false);
+                self.refresh();
+            }
+            // Not connected, whatever the page was told before -- the
+            // connection failed or was dropped, which shim.cpp says why of
+            // -- and nothing on its way unless the site is being asked.
+            DISCONNECTED => {
+                if error != 0 {
+                    eprintln!("Discord: disconnected ({error}, {detail})");
                 }
+                let asking = self.asking;
+                self.set(|linked| {
+                    linked.connected = false;
+                    linked.connecting = asking;
+                });
             }
             // Connecting or reconnecting, which the SDK does by itself.
             _ => {}
         }
+        // The activity goes on by the Discord app beside this one, which
+        // may not have it: it was the account's.
+        if status == DISCONNECTED {
+            if let Some((shown, start)) = self.current.clone() {
+                self.show(&shown, start);
+            }
+        }
     }
 
     fn let_go(&mut self) {
-        linking::forget();
+        self.generation += 1;
+        self.asking = false;
+        self.ask_again = None;
+        self.ask_again_after = RETRY_TOKENS;
+        linking::forget(&self.site);
         if let Some(refresh_token) = self.refresh_token.take() {
-            let site = self.site.clone();
-            std::thread::spawn(move || linking::revoke(&site, &refresh_token));
+            self.revoke(refresh_token);
         }
         self.friends_wanted = None;
         if self.status == DISCONNECTED {
@@ -380,11 +513,62 @@ impl Thread {
         }
     }
 
-    fn refresh(&self, refresh_token: String) {
-        let (site, tell) = (self.site.clone(), self.tell.clone());
+    /// The account is no good -- Discord said no to its refresh token, or
+    /// the SDK would not take its access token -- and is forgotten, and let
+    /// go of if it is connected yet.
+    fn forget_account(&mut self) {
+        linking::forget(&self.site);
+        self.refresh_token = None;
+        self.ask_again = None;
+        if self.status == DISCONNECTED {
+            self.set(|linked| *linked = Linked::default());
+        } else {
+            self.letting_go = true;
+            unsafe { oeee_discord_disconnect() };
+        }
+    }
+
+    /// Hands `refresh_token` back to Discord, on a thread of its own.
+    fn revoke(&self, refresh_token: String) {
+        if refresh_token.is_empty() {
+            return;
+        }
+        let site = self.site.clone();
+        std::thread::spawn(move || linking::revoke(&site, &refresh_token));
+    }
+
+    /// Asks the site for new tokens for the refresh token kept, unless it
+    /// is being asked already: the account's page says it is connecting,
+    /// unless it is connected on the token it has.
+    fn refresh(&mut self) {
+        let Some(refresh_token) = self.refresh_token.clone() else {
+            return;
+        };
+        if self.asking {
+            return;
+        }
+        self.asking = true;
+        self.ask_again = None;
+        if !self.linked.lock().unwrap().connected {
+            self.set(|linked| linked.connecting = true);
+        }
+        let (site, tell, generation) = (self.site.clone(), self.tell.clone(), self.generation);
         std::thread::spawn(move || {
-            let _ = tell.send(Told::Tokens(linking::refresh(&site, &refresh_token)));
+            let tokens = linking::refresh(&site, &refresh_token);
+            let _ = tell.send(Told::Tokens(generation, tokens));
         });
+    }
+
+    /// Connecting took too long: whatever is still on its way is no longer
+    /// waited for, and the page offers to connect again.
+    fn stop_connecting(&mut self) {
+        eprintln!("Discord: connecting took too long");
+        self.generation += 1;
+        self.asking = false;
+        if self.status != DISCONNECTED && self.status != READY {
+            unsafe { oeee_discord_disconnect() };
+        }
+        self.set(|linked| linked.connecting = false);
     }
 
     fn show(&mut self, shown: &Shown, start: u64) {
@@ -424,11 +608,16 @@ impl Thread {
     }
 
     /// Changes what the page is told, and tells it.
-    fn set(&self, change: impl FnOnce(&mut Linked)) {
-        let script = {
+    fn set(&mut self, change: impl FnOnce(&mut Linked)) {
+        let (script, connecting) = {
             let mut linked = self.linked.lock().unwrap();
             change(&mut linked);
-            state_script(&linked)
+            (state_script(&linked), linked.connecting)
+        };
+        self.connecting_since = match self.connecting_since {
+            Some(since) if connecting => Some(since),
+            None if connecting => Some(Instant::now()),
+            _ => None,
         };
         self.eval(&script);
     }
@@ -490,17 +679,22 @@ extern "C" fn shown_back(context: *mut c_void, shown: bool) {
 
 extern "C" fn authorized(
     context: *mut c_void,
+    generation: u64,
     code: OeeeText,
     redirect: OeeeText,
     verifier: OeeeText,
 ) {
     let (code, redirect, verifier) = unsafe { (code.read(), redirect.read(), verifier.read()) };
     let answer = (!code.is_empty()).then_some((code, redirect, verifier));
-    tell(context, Told::Authorized(answer));
+    tell(context, Told::Authorized(generation, answer));
 }
 
-extern "C" fn status_changed(context: *mut c_void, status: i32) {
-    tell(context, Told::Status(status));
+extern "C" fn token_taken(context: *mut c_void, generation: u64, taken: bool) {
+    tell(context, Told::TokenTaken(generation, taken));
+}
+
+extern "C" fn status_changed(context: *mut c_void, status: i32, error: i32, detail: i32) {
+    tell(context, Told::Status(status, error, detail));
 }
 
 extern "C" fn people(context: *mut c_void) {

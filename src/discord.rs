@@ -89,10 +89,31 @@ pub const LAUNCH: &str = "oeee-cafe://discord";
 /// [`LAUNCH`], which the running app takes as it takes the scheme opened.
 pub fn launch_command() -> String {
     match std::env::current_exe() {
-        Ok(exe) => format!("\"{}\" {LAUNCH}", exe.display()),
+        Ok(exe) => format!("{} {LAUNCH}", quoted_exe(&exe.display().to_string())),
         // The SDK registers the running executable for an empty command.
         Err(_) => String::new(),
     }
+}
+
+/// `exe` in double quotes, as the SDK's own example of a command has it
+/// (`RegisterLaunchCommand` in discordpp.h), which says nothing more of how
+/// the command is read. On Windows a path cannot hold a `"`, and nothing in
+/// it needs escaping. A Linux path can hold anything, and `"`, `` ` ``, `$`
+/// and `\` are escaped with a `\`: inside double quotes that is what both a
+/// shell and a desktop entry's `Exec` -- the two ways Discord could be
+/// running it -- take them by. Single quotes would do for a shell, and are
+/// not quotes at all to a desktop entry.
+fn quoted_exe(exe: &str) -> String {
+    let mut quoted = String::with_capacity(exe.len() + 2);
+    quoted.push('"');
+    for c in exe.chars() {
+        if cfg!(not(windows)) && matches!(c, '"' | '`' | '$' | '\\') {
+            quoted.push('\\');
+        }
+        quoted.push(c);
+    }
+    quoted.push('"');
+    quoted
 }
 
 /// What the player is doing, as Discord is to show it.
@@ -406,6 +427,27 @@ mod tests {
                 room: None
             }
         );
+    }
+
+    #[test]
+    fn the_executable_is_quoted_as_the_platform_reads_a_command() {
+        if cfg!(windows) {
+            assert_eq!(
+                quoted_exe(
+                    r"C:\Program Files (x86)\Steam\steamapps\common\Oeee Cafe\oeee-cafe.exe"
+                ),
+                r#""C:\Program Files (x86)\Steam\steamapps\common\Oeee Cafe\oeee-cafe.exe""#
+            );
+        } else {
+            assert_eq!(
+                quoted_exe("/home/a b/oeee-cafe"),
+                r#""/home/a b/oeee-cafe""#
+            );
+            assert_eq!(
+                quoted_exe(r#"/tmp/"$(rm -rf ~)"`x`\/oeee-cafe"#),
+                r#""/tmp/\"\$(rm -rf ~)\"\`x\`\\/oeee-cafe""#
+            );
+        }
     }
 
     #[test]

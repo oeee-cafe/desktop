@@ -54,25 +54,49 @@ fn discord_social_sdk() {
         .compile("oeee_discord");
 
     let target = std::env::var("TARGET").unwrap();
-    // Windows on ARM has its own, in an `arm64` folder beside x64's.
-    let arch = if target.starts_with("aarch64") && target.contains("windows") {
+    let (windows, apple) = (target.contains("windows"), target.contains("apple"));
+    // Windows on ARM has its own, in an `arm64` folder beside x64's, and
+    // macOS's one library is for both. Linux has x64's alone, which an ARM
+    // build is not to be linked against for want of its own: one is looked
+    // for where Windows's is, should a later SDK bring one, and its absence
+    // said plainly rather than left to the linker.
+    let arch = if target.starts_with("aarch64") && !apple {
         "arm64"
     } else {
         ""
     };
     let release = sdk.join("lib/release").join(arch);
+    if !windows && !apple {
+        let library = release.join("libdiscord_partner_sdk.so");
+        if !target.starts_with(if arch.is_empty() { "x86_64" } else { "aarch64" })
+            || !library.exists()
+        {
+            panic!(
+                "\n\nDiscord's Social SDK has no library for {target} (no {}).\n\
+                 Build without it: \
+                 `cargo build --no-default-features --features steam`.\n\n",
+                library.display()
+            );
+        }
+    }
     println!("cargo:rustc-link-search=native={}", release.display());
     println!("cargo:rustc-link-lib=dylib=discord_partner_sdk");
-    if target.contains("windows") {
+    if windows {
         beside_the_binary(
             &sdk.join("bin/release")
                 .join(arch)
                 .join("discord_partner_sdk.dll"),
         );
-    } else if target.contains("apple") {
+    } else if apple {
         // A developer's build, run by cargo from target/<profile>/.
         println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path");
         beside_the_binary(&release.join("libdiscord_partner_sdk.dylib"));
+    } else {
+        // Linux looks for a library where the system keeps them, and not
+        // beside the binary unless told to: `$ORIGIN` is the binary's own
+        // folder, wherever it is installed, which the library ships in.
+        println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+        beside_the_binary(&release.join("libdiscord_partner_sdk.so"));
     }
 }
 

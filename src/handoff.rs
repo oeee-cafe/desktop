@@ -83,18 +83,30 @@ pub fn on_window_event<R: tauri::Runtime>(window: &tauri::Window<R>, event: &tau
 }
 
 fn ask_now<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
-    let _ =
-        window.eval("window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.resume();");
+    let _ = window.eval(resume_script(None));
+}
+
+/// Tells the page to ask the site now, with the code the browser came back
+/// with when it came back with one, as a JavaScript string.
+fn resume_script(code: Option<&str>) -> String {
+    let code = code
+        .and_then(|code| serde_json::to_string(code).ok())
+        .unwrap_or_default();
+    format!("window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.resume({code});")
 }
 
 /// The scheme the browser is sent to once the provider has answered.
 ///
 /// Registered so the browser can knock: the page in the window is asking the
-/// site every couple of seconds anyway, and would get there on its own the
-/// moment somebody switched back, but nobody should have to go looking for
-/// the window. It carries nothing -- the window is already holding the id
-/// and the secret that claim the sign-in -- so an app that took the scheme
-/// for itself would learn nothing by it.
+/// site every couple of seconds anyway, but nobody should have to go looking
+/// for the window. The knock, `oeee-cafe://handoff/done?code=...`, carries a
+/// code the site gave the browser that finished the sign-in, which the page
+/// hands in beside the id and secret it is holding ([`returned`]): the
+/// sign-in goes only to the window that started it *and* heard from the
+/// browser that finished it, so a handoff started anywhere else and pressed
+/// on somebody to finish gets nothing. An app that took the scheme for
+/// itself would learn the code, and without the window's secret could do
+/// nothing with it.
 #[cfg(windows)]
 pub const RETURN_SCHEME: &str = "oeee-cafe";
 
@@ -126,16 +138,48 @@ pub fn register_return(app: &AppHandle) {
     }
 }
 
-/// Brings the window forward when the browser knocks, and asks the site at
-/// once rather than waiting for the page's own clock.
-pub fn returned(app: &AppHandle) {
+/// Brings the window forward on a second launch -- the browser knocking, or
+/// anything else that opens `oeee-cafe://`, Discord's `oeee-cafe://discord`
+/// among them -- and has the page ask the site at once rather than waiting
+/// for its own clock: with the code, when `args`, the second launch's as
+/// single-instance hands them over on Windows and Linux alike, are the
+/// browser's knock.
+///
+/// The page is told before the window comes forward, which tells it again
+/// without the code (`on_window_event`), so that the ask with the code is
+/// the first.
+///
+/// A first launch carrying the knock -- the app closed while the browser
+/// signed in, which the deep-link plugin hands over at its start -- is a new
+/// window holding no handoff, with nothing to resume, and is let be.
+pub fn returned(app: &AppHandle, args: &[String]) {
     let Some(window) = app.get_webview_window(WINDOW) else {
         return;
     };
+    let _ = window.eval(resume_script(code_in(args).as_deref()));
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
-    ask_now(&window);
+}
+
+/// The code in the browser's knock among `args`: `oeee-cafe://handoff/done`
+/// with one `code`, of 64 lowercase hex digits, as the site makes them, and
+/// nothing else. Anything can open the scheme with anything in it, and what
+/// is not a code is not handed to the page.
+fn code_in(args: &[String]) -> Option<String> {
+    args.iter().find_map(|arg| {
+        let url = Url::parse(arg).ok()?;
+        if url.scheme() != "oeee-cafe" || url.host_str() != Some("handoff") || url.path() != "/done"
+        {
+            return None;
+        }
+        let mut codes = url.query_pairs().filter(|(name, _)| name == "code");
+        let code = codes.next()?.1;
+        let only = codes.next().is_none();
+        let well_formed =
+            code.len() == 64 && code.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+        (only && well_formed).then(|| code.into_owned())
+    })
 }
 
 #[cfg(test)]
@@ -152,6 +196,58 @@ mod tests {
         assert!(opens(
             "https://accounts.google.com/o/oauth2/v2/auth?client_id=C&state=S&nonce=N"
         ));
+    }
+
+    const CODE: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    fn code(args: &[&str]) -> Option<String> {
+        code_in(&args.iter().map(|a| a.to_string()).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn the_browsers_knock_carries_the_code_to_the_page() {
+        let knock = format!("oeee-cafe://handoff/done?code={CODE}");
+        assert_eq!(
+            code(&[r"C:\Games\Oeee Cafe\oeee-cafe.exe", &knock]),
+            Some(CODE.into())
+        );
+        assert_eq!(code(&[&knock]), Some(CODE.into()));
+        assert_eq!(
+            resume_script(Some(CODE)),
+            format!(
+                r#"window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.resume("{CODE}");"#
+            )
+        );
+        assert_eq!(
+            resume_script(None),
+            "window.oeeeApp && window.oeeeApp.signIn && window.oeeeApp.signIn.resume();"
+        );
+    }
+
+    #[test]
+    fn anything_but_a_code_in_the_knock_is_no_code() {
+        let upper = CODE.to_uppercase();
+        let short = &CODE[..63];
+        let long = format!("{CODE}0");
+        let breaking_out = format!("{}%22);alert(1);//", &CODE[..48]);
+        for knock in [
+            format!("oeee-cafe://handoff/done?code={upper}"),
+            format!("oeee-cafe://handoff/done?code={short}"),
+            format!("oeee-cafe://handoff/done?code={long}"),
+            format!("oeee-cafe://handoff/done?code={breaking_out}"),
+            format!("oeee-cafe://handoff/done?code={CODE}&code={CODE}"),
+            format!("oeee-cafe://handoff/done/?code={CODE}"),
+            format!("oeee-cafe://handoff/start?code={CODE}"),
+            format!("oeee-cafe://discord?code={CODE}"),
+            format!("https://handoff/done?code={CODE}"),
+            format!("other://handoff/done?code={CODE}"),
+            "oeee-cafe://handoff/done".to_string(),
+            "oeee-cafe://handoff/done?code=".to_string(),
+            "oeee-cafe://discord".to_string(),
+            "--flag".to_string(),
+        ] {
+            assert_eq!(code(&["oeee-cafe.exe", &knock]), None, "{knock}");
+        }
     }
 
     #[test]

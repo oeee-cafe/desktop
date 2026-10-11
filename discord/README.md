@@ -28,6 +28,11 @@ build) needs it unpacked here first:
 it, so it ships beside the `.exe` too: in Steam's depot, and in the MSIX
 (`msstore/package.ps1`). `social_sdk/` is gitignored.
 
+On Linux it links `lib/release/libdiscord_partner_sdk.so` instead, copies it
+beside the binary the same way, and has the binary look for it there
+(`-rpath $ORIGIN`), so it ships beside the binary too. The SDK has no Linux
+library for ARM, and an ARM Linux build with the feature stops and says so.
+
 A build without the SDK leaves the feature out:
 
 ```bash

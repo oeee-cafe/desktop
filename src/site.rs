@@ -25,6 +25,13 @@ pub fn is_site(page: &Url, site: &Url) -> bool {
     page.origin() == site.origin()
 }
 
+/// Whether `site` is oeee.cafe itself, and not a development build's
+/// somewhere else.
+#[cfg_attr(not(feature = "discord"), allow(dead_code))]
+pub fn is_production(site: &Url) -> bool {
+    is_site(site, &default())
+}
+
 /// The address pattern a capability gives the site's pages by (main.rs):
 /// the site and nothing else -- its origin, as [`is_site`] compares it.
 pub fn pattern(site: &Url) -> String {

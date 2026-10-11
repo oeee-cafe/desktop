@@ -277,9 +277,9 @@ fn main() {
         // exits, and the window already open comes forward.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // Opening oeee-cafe://... while the app is running is a second
-            // launch carrying it on Windows, so this is also how a sign-in
-            // comes back (handoff.rs).
-            handoff::returned(app);
+            // launch carrying it, so this is also how a sign-in comes back,
+            // with the code the page hands in (handoff.rs).
+            handoff::returned(app, &args);
             // And a launch Steam made to join a friend's room, should it make
             // one while the app runs rather than tell it (steam.rs).
             if let (Some(path), Some(joining)) = (
