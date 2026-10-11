@@ -36,20 +36,51 @@ struct OeeeActivity {
     int32_t seats;
 };
 
-typedef void (*OeeeJoined)(void* context, const char* secret, size_t len);
-typedef void (*OeeeShown)(void* context, bool shown);
+// What the SDK says back, each handed the context discord.rs started it
+// with.
+struct OeeeCallbacks {
+    // A friend's join secret, from an invitation accepted in Discord.
+    void (*joined)(void* context, OeeeText secret);
+    // Whether Discord took the activity last shown.
+    void (*shown)(void* context, bool shown);
+    // The player said yes in Discord's consent screen, or did not: a code
+    // for the site to trade (src/discord.rs in oeee-cafe/web), the redirect
+    // it was given for, and the PKCE verifier it was asked with. All empty
+    // for no.
+    void (*authorized)(void* context, OeeeText code, OeeeText redirect, OeeeText verifier);
+    // The connection's state: discordpp::Client::Status, or -1 for a token
+    // Discord would not take.
+    void (*status)(void* context, int32_t status);
+    // Something about the player's friends changed.
+    void (*people)(void* context);
+    // Whether an invitation reached `user`.
+    void (*invited)(void* context, uint64_t user, bool sent);
+    // The access token is about to run out.
+    void (*expiring)(void* context);
+};
+
+// One of the player's friends, or the player: `group` is
+// discordpp::RelationshipGroupType -- playing Oeee Cafe, online elsewhere,
+// or offline -- and `status` discordpp::StatusType.
+typedef void (*OeeePerson)(void* data, uint64_t id, OeeeText name, int32_t status, int32_t group);
 
 }
 
 namespace {
 
 std::unique_ptr<discordpp::Client> client;
+uint64_t application = 0;
 void* context = nullptr;
-OeeeShown shown = nullptr;
+OeeeCallbacks said{};
 
 std::string text(OeeeText t)
 {
     return t.ptr ? std::string(t.ptr, t.len) : std::string();
+}
+
+OeeeText of(std::string const& s)
+{
+    return OeeeText{s.data(), s.size()};
 }
 
 } // namespace
@@ -63,11 +94,11 @@ void oeee_discord_start(uint64_t app,
                         uint32_t steam_app,
                         OeeeText launch,
                         void* ctx,
-                        OeeeJoined joined,
-                        OeeeShown shown_cb)
+                        const OeeeCallbacks* callbacks)
 {
+    application = app;
     context = ctx;
-    shown = shown_cb;
+    said = *callbacks;
     client = std::make_unique<discordpp::Client>();
     // What the SDK says of itself, beside the app's own output: warnings
     // and worse, or everything with OEEE_CAFE_DISCORD_LOG set.
@@ -84,9 +115,17 @@ void oeee_discord_start(uint64_t app,
     if (!registered) {
         std::fprintf(stderr, "Discord: could not register how to launch the app\n");
     }
-    client->SetActivityJoinCallback([joined](std::string secret) {
-        joined(context, secret.data(), secret.size());
-    });
+    client->SetActivityJoinCallback(
+      [](std::string secret) { said.joined(context, of(secret)); });
+    client->SetStatusChangedCallback(
+      [](discordpp::Client::Status status, discordpp::Client::Error, int32_t) {
+          said.status(context, static_cast<int32_t>(status));
+      });
+    client->SetRelationshipCreatedCallback([](uint64_t, bool) { said.people(context); });
+    client->SetRelationshipDeletedCallback([](uint64_t, bool) { said.people(context); });
+    client->SetRelationshipGroupsUpdatedCallback([](uint64_t) { said.people(context); });
+    client->SetUserUpdatedCallback([](uint64_t) { said.people(context); });
+    client->SetTokenExpirationCallback([]() { said.expiring(context); });
 }
 
 // Shows `activity` as the player's.
@@ -131,7 +170,120 @@ void oeee_discord_show(const OeeeActivity* activity)
         } else {
             std::fprintf(stderr, "Discord: %s\n", result.ToString().c_str());
         }
-        shown(context, result.Successful());
+        said.shown(context, result.Successful());
+    });
+}
+
+// Asks the player, in Discord's overlay or their browser, to let the app see
+// their friends and invite them: the presence scopes, which are those. The
+// code that comes back is traded by the site, which holds the client
+// secret; the SDK's own GetToken is for public clients only.
+void oeee_discord_authorize()
+{
+    if (!client) {
+        return;
+    }
+    auto verifier = client->CreateAuthorizationCodeVerifier();
+    discordpp::AuthorizationArgs args;
+    args.SetClientId(application);
+    args.SetScopes(discordpp::Client::GetDefaultPresenceScopes());
+    args.SetCodeChallenge(verifier.Challenge());
+    std::string kept = verifier.Verifier();
+    client->Authorize(
+      std::move(args),
+      [kept](discordpp::ClientResult result, std::string code, std::string redirect) {
+          if (!result.Successful()) {
+              std::fprintf(stderr, "Discord: not authorized: %s\n", result.ToString().c_str());
+              said.authorized(context, OeeeText{}, OeeeText{}, OeeeText{});
+              return;
+          }
+          said.authorized(context, of(code), of(redirect), of(kept));
+      });
+}
+
+// Connects as the player whose access token this is.
+void oeee_discord_connect(OeeeText access_token)
+{
+    if (!client) {
+        return;
+    }
+    client->UpdateToken(discordpp::AuthorizationTokenType::Bearer,
+                        text(access_token),
+                        [](discordpp::ClientResult result) {
+                            if (!result.Successful()) {
+                                std::fprintf(stderr,
+                                             "Discord: token not taken: %s\n",
+                                             result.ToString().c_str());
+                                said.status(context, -1);
+                                return;
+                            }
+                            client->Connect();
+                        });
+}
+
+// Lets go of the player's account. The activity goes on by the Discord app
+// beside this one, as before they connected.
+void oeee_discord_disconnect()
+{
+    if (client) {
+        client->Disconnect();
+    }
+}
+
+// The player, connected: their id and name.
+void oeee_discord_me(OeeePerson each, void* data)
+{
+    if (!client) {
+        return;
+    }
+    auto me = client->GetCurrentUserV2();
+    if (!me) {
+        return;
+    }
+    std::string name = me->DisplayName();
+    each(data, me->Id(), of(name), static_cast<int32_t>(me->Status()), 0);
+}
+
+// The player's Discord friends, those playing Oeee Cafe first, then those
+// online elsewhere, then the rest.
+void oeee_discord_friends(OeeePerson each, void* data)
+{
+    if (!client) {
+        return;
+    }
+    for (auto group : {discordpp::RelationshipGroupType::OnlinePlayingGame,
+                       discordpp::RelationshipGroupType::OnlineElsewhere,
+                       discordpp::RelationshipGroupType::Offline}) {
+        for (auto& relationship : client->GetRelationshipsByGroup(group)) {
+            if (relationship.DiscordRelationshipType() != discordpp::RelationshipType::Friend) {
+                continue;
+            }
+            auto user = relationship.User();
+            if (!user) {
+                continue;
+            }
+            std::string name = user->DisplayName();
+            each(data,
+                 user->Id(),
+                 of(name),
+                 static_cast<int32_t>(user->Status()),
+                 static_cast<int32_t>(group));
+        }
+    }
+}
+
+// Sends `user` an invitation to the activity showing, which has to be a room
+// a friend can join.
+void oeee_discord_invite(uint64_t user)
+{
+    if (!client) {
+        return;
+    }
+    client->SendActivityInvite(user, "", [user](discordpp::ClientResult result) {
+        if (!result.Successful()) {
+            std::fprintf(stderr, "Discord: invitation not sent: %s\n", result.ToString().c_str());
+        }
+        said.invited(context, user, result.Successful());
     });
 }
 

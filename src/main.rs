@@ -133,6 +133,14 @@ fn listen_to_the_site(
             Some(bridge::Message::Notify { title, body, url }) => {
                 notify::show(&window, &site, title, body, url)
             }
+            // Only a page shown in a build with Discord ever asks, since
+            // only there is it told the account's state to ask from.
+            Some(bridge::Message::Discord { action, user }) => {
+                let asked = discord::Asked::from(&action, user.as_deref());
+                if let (Some(discord), Some(asked)) = (&discord, asked) {
+                    discord.asked(asked);
+                }
+            }
             // The page asks this app only for Steam's sign-in, and only where
             // the user agent named Steam as the store (steam::store). Answered
             // with nothing where there is no Steam, rather than left waiting.

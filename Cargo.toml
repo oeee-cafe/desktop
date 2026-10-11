@@ -17,7 +17,7 @@ description = "Oeee Cafe for the desktop, on Steam and the Microsoft Store: a wi
 [features]
 default = ["steam", "discord"]
 steam = ["dep:steamworks", "dep:ureq"]
-discord = []
+discord = ["dep:ureq"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -51,9 +51,10 @@ rfd = { version = "0.16", default-features = false, features = ["common-controls
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
 # Asks Steam's public store API what a DLC costs (steam.rs); Steamworks
-# itself has no way to say. On Windows over the system's own TLS, trusting
+# itself has no way to say. And asks the site to trade a Discord account's
+# tokens (discord/linking.rs). On Windows over the system's own TLS, trusting
 # what Windows trusts, as Edge does.
-ureq = { version = "3", optional = true, default-features = false, features = ["native-tls", "gzip"] }
+ureq = { version = "3", optional = true, default-features = false, features = ["native-tls", "gzip", "json"] }
 # The lists the Store's calls take, which `windows` does not re-export.
 windows-collections = "0.2"
 windows = { version = "0.61", features = [
@@ -69,6 +70,7 @@ windows = { version = "0.61", features = [
   "Win32_System_LibraryLoader",
   "Win32_System_Memory",
   "Win32_System_Ole",
+  "Win32_Security_Credentials",
   "Win32_System_Registry",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_Shell",

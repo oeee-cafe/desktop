@@ -46,8 +46,14 @@ cargo build --no-default-features --features steam
   `/_discord/join?secret=...`, which the site turns into the room (oeee-cafe/web,
   `discord_join`), in the browser or in the iOS app. Only once the site has
   that route: the activity offers phones the invitation either way.
-- **Interactions Endpoint URL** and OAuth2 redirects: none. Nothing here is a
-  bot, and nobody signs in to Discord.
+- **OAuth2 > Redirects**: `http://127.0.0.1/callback`, for connecting a
+  player's account to the app (below): the SDK listens there, on the
+  player's own computer, for Discord's consent screen to answer. Beside the
+  site's own `https://oeee.cafe/auth/discord/callback`, for Sign in with
+  Discord. Leave **Public Client** off: the site trades the app's codes
+  with the secret (`/api/discord/token` in oeee-cafe/web), so the
+  application stays the confidential client the site's sign-in needs.
+- **Interactions Endpoint URL**: none. Nothing here is a bot.
 
 ## What it does
 
@@ -65,6 +71,15 @@ cargo build --no-default-features --features steam
   whether they may enter and whether there is a seat.
 - A friend who accepts on their phone is sent to the room on the site (the
   Deep Link URL above), and needs no app at all.
+- In a room, **Invite** beside Share lists the player's Discord friends and
+  sends the one picked an invitation, without going to Discord. The first
+  time, it asks them to connect their Discord account to the app: Discord's
+  own consent screen, in its overlay or the browser, for the friends list
+  and invitations (the SDK's presence scopes) and nothing more. The account
+  page shows it under **In this app**, with **Disconnect**. The refresh
+  token is kept in Windows's Credential Manager (`cafe.oeee/discord`), for
+  this Windows user on this computer; disconnecting forgets it and hands it
+  back to Discord, which takes the app off the player's authorized apps.
 
 Testing needs two Discord accounts that are friends, each with Discord's
 desktop app running, on two computers (or one Windows user account each):

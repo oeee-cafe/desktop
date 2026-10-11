@@ -22,6 +22,14 @@
 //! player signing in to Discord here or the site learning their Discord
 //! account. Without Discord running, or in a build without the `discord`
 //! feature, there is nobody to tell and nothing happens.
+//!
+//! A player who wants to ask friends in from the room itself connects their
+//! Discord account to the app, once (linking.rs): the room's Invite button
+//! (SessionHeader.tsx in oeee-cafe/web) asks for that the first time, and
+//! the account page shows it and lets it go. Connected, the app lists their
+//! Discord friends for the room's picker and sends the one picked an
+//! invitation, as Discord's own + would. The page asks with `discord` on
+//! the bridge ([`Asked`]), and is answered on `oeeeApp.discord`.
 
 // Without the `discord` feature, what reads pages and checks secrets is
 // still built and tested, and nothing calls it.
@@ -32,6 +40,8 @@ use crate::words::Words;
 
 #[cfg(feature = "discord")]
 mod client;
+#[cfg(feature = "discord")]
+mod linking;
 #[cfg(feature = "discord")]
 pub use client::{start, Discord};
 
@@ -46,6 +56,10 @@ impl Discord {
     }
 
     pub fn page_shown(&self) {
+        match *self {}
+    }
+
+    pub fn asked(&self, _asked: Asked) {
         match *self {}
     }
 }
@@ -180,9 +194,151 @@ fn text(value: &str, most: usize) -> String {
     value.to_string()
 }
 
+/// What the page asks of the player's Discord account (`discord` on the
+/// bridge, bridge.rs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Asked {
+    /// Connect it: Discord's consent screen, then the account.
+    Connect,
+    /// Let it go, and forget it on this computer.
+    Disconnect,
+    /// The friends to offer an invitation, answered with
+    /// `oeeeApp.discord.friends` now and whenever they change.
+    Friends,
+    /// Invite this Discord user to the room showing.
+    Invite(u64),
+}
+
+impl Asked {
+    /// What `action` asks, with `user` for an invitation: a Discord id,
+    /// which the page carries as a string, since a JavaScript number cannot
+    /// hold one.
+    pub fn from(action: &str, user: Option<&str>) -> Option<Asked> {
+        match action {
+            "connect" => Some(Asked::Connect),
+            "disconnect" => Some(Asked::Disconnect),
+            "friends" => Some(Asked::Friends),
+            "invite" => user?.parse().ok().filter(|id| *id != 0).map(Asked::Invite),
+            _ => None,
+        }
+    }
+}
+
+/// What the page is told of the player's Discord account in this app.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct Linked {
+    pub connected: bool,
+    /// Asking Discord, trading the code or connecting: the page's buttons
+    /// say so rather than offering to start again.
+    pub connecting: bool,
+    /// What Discord calls them, once connected.
+    pub name: Option<String>,
+}
+
+/// A friend, as the room's picker lists them.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct Friend {
+    pub id: String,
+    pub name: String,
+    /// "online", "idle", "dnd" or "offline".
+    pub status: &'static str,
+    /// In Oeee Cafe now.
+    pub playing: bool,
+}
+
+impl Friend {
+    /// From what shim.cpp says of one: `status` is the SDK's StatusType and
+    /// `group` its RelationshipGroupType.
+    pub fn from_sdk(id: u64, name: &str, status: i32, group: i32) -> Friend {
+        Friend {
+            id: id.to_string(),
+            name: name.to_string(),
+            status: match status {
+                0 | 6 => "online",
+                3 => "idle",
+                4 => "dnd",
+                _ => "offline",
+            },
+            playing: group == 0,
+        }
+    }
+}
+
+/// Tells the page where the player's Discord account stands. Guarded, as
+/// every call into the page is.
+pub fn state_script(linked: &Linked) -> String {
+    format!(
+        "window.oeeeApp && window.oeeeApp.discord && window.oeeeApp.discord.state && window.oeeeApp.discord.state({});",
+        quoted(linked)
+    )
+}
+
+/// Hands the page the player's friends.
+pub fn friends_script(friends: &[Friend]) -> String {
+    format!(
+        "window.oeeeApp && window.oeeeApp.discord && window.oeeeApp.discord.friends && window.oeeeApp.discord.friends({});",
+        quoted(&friends)
+    )
+}
+
+/// Tells the page whether an invitation reached `user`.
+pub fn invited_script(user: u64, sent: bool) -> String {
+    format!(
+        "window.oeeeApp && window.oeeeApp.discord && window.oeeeApp.discord.invited && window.oeeeApp.discord.invited({});",
+        quoted(&serde_json::json!({ "user": user.to_string(), "sent": sent }))
+    )
+}
+
+use crate::store::quoted;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_page_asks_for_what_it_can_and_names_a_user_by_a_string() {
+        assert_eq!(Asked::from("connect", None), Some(Asked::Connect));
+        assert_eq!(Asked::from("friends", Some("x")), Some(Asked::Friends));
+        assert_eq!(
+            Asked::from("invite", Some("80351110224678912")),
+            Some(Asked::Invite(80351110224678912))
+        );
+        for (action, user) in [
+            ("invite", None),
+            ("invite", Some("")),
+            ("invite", Some("0")),
+            ("invite", Some("-1")),
+            ("invite", Some("8.0e16")),
+            ("invite", Some("99999999999999999999")),
+            ("send money", None),
+        ] {
+            assert_eq!(Asked::from(action, user), None, "{action} {user:?}");
+        }
+    }
+
+    #[test]
+    fn a_friend_is_named_as_the_picker_reads_them() {
+        let friend = Friend::from_sdk(80351110224678912, "넬리", 3, 0);
+        assert_eq!(
+            serde_json::to_value(&friend).unwrap(),
+            serde_json::json!({"id": "80351110224678912", "name": "넬리", "status": "idle", "playing": true})
+        );
+        assert_eq!(Friend::from_sdk(1, "a", 6, 1).status, "online");
+        assert_eq!(Friend::from_sdk(1, "a", 1, 2).status, "offline");
+        assert!(!Friend::from_sdk(1, "a", 0, 1).playing);
+    }
+
+    #[test]
+    fn the_page_is_told_only_if_it_is_listening() {
+        let script = state_script(&Linked {
+            connected: true,
+            connecting: false,
+            name: Some("넬리".into()),
+        });
+        assert!(script.starts_with("window.oeeeApp && window.oeeeApp.discord && window.oeeeApp.discord.state && window.oeeeApp.discord.state("));
+        assert!(script.contains(r#""name":"넬리""#));
+        assert!(invited_script(42, false).contains(r#"{"sent":false,"user":"42"}"#));
+    }
 
     const ROOM: &str = "/collaborate/9c881320-2b43-4afa-b2bb-7128c8a3e985";
 

@@ -63,6 +63,10 @@ fn expected(kind: &str, m: &Value) -> Option<Message> {
         "theme" => Message::Theme(Theme {
             ground: text(&m["ground"]),
         }),
+        "discord" => Message::Discord {
+            action: text(&m["action"]).expect("an action"),
+            user: text(&m["user"]),
+        },
         "notify" => Message::Notify {
             title: text(&m["title"])?,
             body: text(&m["body"])?,
@@ -260,6 +264,9 @@ fn every_member_the_app_calls_is_the_pages() {
         "store.purchased",
         "store.ended",
         "store.ticket",
+        "discord.state",
+        "discord.friends",
+        "discord.invited",
     ] {
         assert!(called.contains(member), "found no call of {member}");
     }

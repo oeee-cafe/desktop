@@ -333,7 +333,10 @@ changing it.
   the profile, the party's count as someone joins, an invitation accepted
   with the app closed (a Steam launch and an `oeee-cafe://` one) and with it
   open over an unsaved drawing, Ask to Join, and the app started before
-  Discord. In the MSIX, the SDK's registration of
+  Discord. Connecting an account and inviting from the room's picker have
+  not been run at all: the consent screen (overlay or browser), the site's
+  trade, the friends list, an invitation sent, the account kept across a
+  restart and refreshed after a week, and Disconnect. In the MSIX, the SDK's registration of
   `discord-<application id>://` was seen not to reach the registry, and the
   scheme the manifest declares instead was seen to open the registered x64
   package, closed or already open; that Discord itself opens it, on an

@@ -81,6 +81,14 @@ pub enum Message {
         body: String,
         url: String,
     },
+    /// Something asked of the player's Discord account in this app
+    /// (discord.rs): "connect", "disconnect", "friends", or "invite" with
+    /// `user`, a Discord id as a string.
+    Discord {
+        action: String,
+        #[serde(default)]
+        user: Option<String>,
+    },
     /// Anything else the site says -- `restore` among it, which neither
     /// store here has: Steam and the Microsoft Store both keep what was
     /// bought on the account, and the site asks them.
