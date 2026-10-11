@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <unordered_map>
 
 extern "C" {
 
@@ -63,6 +64,9 @@ struct OeeeCallbacks {
     void (*invited)(void* context, uint64_t user, bool sent);
     // The access token is about to run out.
     void (*expiring)(void* context);
+    // A friend pressed Ask to Join on the player's activity: who, what
+    // Discord calls them, and the party they asked into.
+    void (*requested)(void* context, uint64_t user, OeeeText name, OeeeText party);
 };
 
 // One of the player's friends, or the player: `group` is
@@ -82,6 +86,9 @@ discordpp::Client* client = nullptr;
 uint64_t application = 0;
 void* context = nullptr;
 OeeeCallbacks said{};
+// The requests to join not yet answered, by who sent them: what answering
+// one needs is the request itself.
+std::unordered_map<uint64_t, discordpp::ActivityInvite> requests;
 
 std::string text(OeeeText t)
 {
@@ -146,6 +153,21 @@ void oeee_discord_start(uint64_t app,
     client->SetRelationshipGroupsUpdatedCallback([](uint64_t) { said.people(context); });
     client->SetUserUpdatedCallback([](uint64_t) { said.people(context); });
     client->SetTokenExpirationCallback([]() { said.expiring(context); });
+    // Invitations the player is sent are Discord's own to show; only a
+    // friend's request to join is the room's.
+    client->SetActivityInviteCreatedCallback([](discordpp::ActivityInvite invite) {
+        if (invite.Type() != discordpp::ActivityActionTypes::JoinRequest) {
+            return;
+        }
+        uint64_t sender = invite.SenderId();
+        std::string name;
+        if (auto user = client->GetUser(sender)) {
+            name = user->DisplayName();
+        }
+        std::string party = invite.PartyId();
+        requests.insert_or_assign(sender, invite);
+        said.requested(context, sender, of(name), of(party));
+    });
 }
 
 // Shows `activity` as the player's.
@@ -317,6 +339,32 @@ void oeee_discord_invite(uint64_t user)
         }
         said.invited(context, user, result.Successful());
     });
+}
+
+// Lets `user`, who asked to join, into the activity showing: their request
+// answered with an invitation. Whether it went comes back as an
+// invitation's does.
+void oeee_discord_let_in(uint64_t user)
+{
+    auto found = requests.find(user);
+    if (!client || found == requests.end()) {
+        said.invited(context, user, false);
+        return;
+    }
+    client->SendActivityJoinRequestReply(found->second, [user](discordpp::ClientResult result) {
+        if (result.Successful()) {
+            requests.erase(user);
+        } else {
+            std::fprintf(stderr, "Discord: not let in: %s\n", result.ToString().c_str());
+        }
+        said.invited(context, user, result.Successful());
+    });
+}
+
+// Lets `user`'s request go unanswered.
+void oeee_discord_forget_request(uint64_t user)
+{
+    requests.erase(user);
 }
 
 // Runs whatever the SDK has waiting, the callbacks above among it.

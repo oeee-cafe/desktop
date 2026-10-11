@@ -30,6 +30,17 @@
 //! Discord friends for the room's picker and sends the one picked an
 //! invitation, as Discord's own + would. The page asks with `discord` on
 //! the bridge ([`Asked`]), and is answered on `oeeeApp.discord`.
+//!
+//! The other way round, a friend who sees the player drawing together can
+//! press Ask to Join on their activity in Discord. Connected, the app hears
+//! the request and the room lists it (`oeeeApp.discord.requests`), with Let
+//! in, which answers it with an invitation, and Not now, which only takes it
+//! off the list. Not connected, the request is Discord's own to show.
+//!
+//! The clock beside the activity is the room's: when it opened, as the site
+//! says it (`since`), so everyone in it shows the same time and a reload
+//! does not start it again. Anywhere else it starts when what the player is
+//! doing changes.
 
 // Without the `discord` feature, what reads pages and checks secrets is
 // still built and tested, and nothing calls it.
@@ -125,6 +136,8 @@ pub struct Shown {
     pub state: Option<String>,
     /// The room they are in, when a friend could join it.
     pub room: Option<Room>,
+    /// When the room opened, in milliseconds since the epoch.
+    pub since: Option<u64>,
 }
 
 /// A collaborative room, as a party friends can be asked into.
@@ -157,11 +170,17 @@ pub fn shown(page: Option<&Page>, words: &Words) -> Shown {
         .filter(|_| in_community)
         .map(|c| text(c, STATE))
         .filter(|c| !c.is_empty());
-    let room = page.filter(|_| activity == "collaborating").and_then(room);
+    let in_room = page.filter(|_| activity == "collaborating");
+    let room = in_room.and_then(room);
+    // Not a time to come: a clock Discord would count down.
+    let since = in_room
+        .and_then(|p| p.since)
+        .filter(|since| *since > 0 && *since <= now());
     Shown {
         details: text(details, DETAILS),
         state,
         room,
+        since,
     }
 }
 
@@ -177,6 +196,13 @@ fn room(page: &Page) -> Option<Room> {
         size,
         seats,
     })
+}
+
+/// Milliseconds since the epoch, as Discord counts an activity's start.
+pub fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
 }
 
 /// The longest Discord takes each field, in bytes.
@@ -211,6 +237,11 @@ pub enum Asked {
     Friends,
     /// Invite this Discord user to the room showing.
     Invite(u64),
+    /// Let this Discord user, who asked to join, into the room showing: an
+    /// invitation in answer to their request.
+    LetIn(u64),
+    /// Take their request off the list. Discord is not told.
+    Dismiss(u64),
 }
 
 impl Asked {
@@ -222,10 +253,16 @@ impl Asked {
             "connect" => Some(Asked::Connect),
             "disconnect" => Some(Asked::Disconnect),
             "friends" => Some(Asked::Friends),
-            "invite" => user?.parse().ok().filter(|id| *id != 0).map(Asked::Invite),
+            "invite" => user_id(user).map(Asked::Invite),
+            "letIn" => user_id(user).map(Asked::LetIn),
+            "dismiss" => user_id(user).map(Asked::Dismiss),
             _ => None,
         }
     }
+}
+
+fn user_id(user: Option<&str>) -> Option<u64> {
+    user?.parse().ok().filter(|id| *id != 0)
 }
 
 /// What the page is told of the player's Discord account in this app.
@@ -268,6 +305,13 @@ impl Friend {
     }
 }
 
+/// A friend who asked to join the room, as the room lists them.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct Request {
+    pub id: String,
+    pub name: String,
+}
+
 /// Tells the page where the player's Discord account stands. Guarded, as
 /// every call into the page is.
 pub fn state_script(linked: &Linked) -> String {
@@ -282,6 +326,14 @@ pub fn friends_script(friends: &[Friend]) -> String {
     format!(
         "window.oeeeApp && window.oeeeApp.discord && window.oeeeApp.discord.friends && window.oeeeApp.discord.friends({});",
         quoted(&friends)
+    )
+}
+
+/// Hands the page the friends waiting to be let into the room.
+pub fn requests_script(requests: &[Request]) -> String {
+    format!(
+        "window.oeeeApp && window.oeeeApp.discord && window.oeeeApp.discord.requests && window.oeeeApp.discord.requests({});",
+        quoted(&requests)
     )
 }
 
@@ -307,7 +359,14 @@ mod tests {
             Asked::from("invite", Some("80351110224678912")),
             Some(Asked::Invite(80351110224678912))
         );
+        assert_eq!(
+            Asked::from("letIn", Some("80351110224678912")),
+            Some(Asked::LetIn(80351110224678912))
+        );
+        assert_eq!(Asked::from("dismiss", Some("2")), Some(Asked::Dismiss(2)));
         for (action, user) in [
+            ("letIn", None),
+            ("dismiss", Some("0")),
             ("invite", None),
             ("invite", Some("")),
             ("invite", Some("0")),
@@ -342,6 +401,12 @@ mod tests {
         assert!(script.starts_with("window.oeeeApp && window.oeeeApp.discord && window.oeeeApp.discord.state && window.oeeeApp.discord.state("));
         assert!(script.contains(r#""name":"넬리""#));
         assert!(invited_script(42, false).contains(r#"{"sent":false,"user":"42"}"#));
+        let requests = requests_script(&[Request {
+            id: "80351110224678912".into(),
+            name: "넬리".into(),
+        }]);
+        assert!(requests.starts_with("window.oeeeApp && window.oeeeApp.discord && window.oeeeApp.discord.requests && window.oeeeApp.discord.requests("));
+        assert!(requests.contains(r#"[{"id":"80351110224678912","name":"넬리"}]"#));
     }
 
     const ROOM: &str = "/collaborate/9c881320-2b43-4afa-b2bb-7128c8a3e985";
@@ -365,9 +430,13 @@ mod tests {
             join: join.map(str::to_string),
             seats: Some(4),
             party,
+            since: Some(OPENED),
             ..Page::default()
         }
     }
+
+    /// 2025-10-11, when a room in these tests opened.
+    const OPENED: u64 = 1760140800000;
 
     #[test]
     fn a_room_a_friend_can_join_is_a_party_they_can_be_asked_into() {
@@ -382,8 +451,37 @@ mod tests {
                     size: 2,
                     seats: 4,
                 }),
+                since: Some(OPENED),
             }
         );
+    }
+
+    #[test]
+    fn the_clock_is_the_rooms_and_never_one_to_come() {
+        let since = |since| {
+            let page = Page {
+                since,
+                ..room_page(Some(ROOM), Some(2))
+            };
+            shown(Some(&page), &Words::default()).since
+        };
+        assert_eq!(since(Some(OPENED)), Some(OPENED));
+        assert_eq!(since(None), None);
+        assert_eq!(since(Some(0)), None);
+        assert_eq!(since(Some(now() + 60 * 60 * 1000)), None);
+        // A room a friend could not enter keeps its clock all the same.
+        let closed = Page {
+            join: None,
+            ..room_page(None, Some(2))
+        };
+        assert_eq!(shown(Some(&closed), &Words::default()).since, Some(OPENED));
+        // Anywhere but a room, there is none.
+        let replay = Page {
+            presence: Some("watching-replay".into()),
+            since: Some(OPENED),
+            ..Page::default()
+        };
+        assert_eq!(shown(Some(&replay), &Words::default()).since, None);
     }
 
     #[test]
@@ -424,7 +522,8 @@ mod tests {
             Shown {
                 details: "Browsing Oeee Cafe".into(),
                 state: None,
-                room: None
+                room: None,
+                since: None,
             }
         );
     }

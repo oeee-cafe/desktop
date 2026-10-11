@@ -1,7 +1,8 @@
 //! Discord's Social SDK itself, in a build with the `discord` feature,
 //! through the few calls shim.cpp makes of it: the activity `super` works
 //! out, a friend's join secret back, and -- once the player has connected
-//! their account (linking.rs) -- their friends and the invitations sent them.
+//! their account (linking.rs) -- their friends, the invitations sent them,
+//! and the requests to join that come back.
 //!
 //! The SDK is had on one thread of its own, which starts it, runs its
 //! callbacks and is the only one to call it; everything else sends that
@@ -11,15 +12,15 @@
 use std::ffi::{c_char, c_void};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use tauri::Manager;
 use url::Url;
 
 use super::linking::{self, Refused, Tokens};
 use super::{
-    friends_script, invited_script, launch_command, shown, state_script, Asked, Friend, Linked,
-    Shown, APPLICATION_ID,
+    friends_script, invited_script, launch_command, now, requests_script, shown, state_script,
+    Asked, Friend, Linked, Request, Shown, APPLICATION_ID,
 };
 use crate::bridge::Page;
 use crate::joining::{room_path, Joining};
@@ -72,6 +73,7 @@ struct OeeeCallbacks {
     people: extern "C" fn(*mut c_void),
     invited: extern "C" fn(*mut c_void, u64, bool),
     expiring: extern "C" fn(*mut c_void),
+    requested: extern "C" fn(*mut c_void, u64, OeeeText, OeeeText),
 }
 
 type Person = extern "C" fn(data: *mut c_void, id: u64, name: OeeeText, status: i32, group: i32);
@@ -92,6 +94,8 @@ extern "C" {
     fn oeee_discord_me(each: Person, data: *mut c_void);
     fn oeee_discord_friends(each: Person, data: *mut c_void);
     fn oeee_discord_invite(user: u64);
+    fn oeee_discord_let_in(user: u64);
+    fn oeee_discord_forget_request(user: u64);
     fn oeee_discord_tick();
 }
 
@@ -157,12 +161,16 @@ enum Told {
     People,
     Invited(u64, bool),
     Expiring,
+    /// A friend pressed Ask to Join: who, what Discord calls them, and the
+    /// party they asked into.
+    Requested(u64, String, String),
 }
 
 pub struct Discord {
     tell: Mutex<Sender<Told>>,
     joining: Arc<Joining>,
     linked: Arc<Mutex<Linked>>,
+    requests: Arc<Mutex<Vec<Request>>>,
 }
 
 /// What the SDK's thread hands back to itself through shim.cpp.
@@ -178,13 +186,15 @@ struct Context {
 /// `joining` takes a friend into the room their join secret names.
 pub fn start(site: &Url, steam_app: Option<u32>, joining: Arc<Joining>) -> Option<Arc<Discord>> {
     let linked = Arc::new(Mutex::new(Linked::default()));
+    let requests = Arc::new(Mutex::new(Vec::new()));
     let (tell, told) = mpsc::channel();
     let context = Context {
         joining: joining.clone(),
         tell: tell.clone(),
         taken: false,
     };
-    let (to_self, kept_linked, site_for_thread) = (tell.clone(), linked.clone(), site.clone());
+    let (to_self, kept_linked, kept_requests, site_for_thread) =
+        (tell.clone(), linked.clone(), requests.clone(), site.clone());
     std::thread::Builder::new()
         .name("discord".into())
         .spawn(move || {
@@ -192,6 +202,7 @@ pub fn start(site: &Url, steam_app: Option<u32>, joining: Arc<Joining>) -> Optio
                 context: std::ptr::null_mut(),
                 tell: to_self,
                 linked: kept_linked,
+                requests: kept_requests,
                 site: site_for_thread,
                 current: None,
                 offered: Instant::now(),
@@ -215,6 +226,7 @@ pub fn start(site: &Url, steam_app: Option<u32>, joining: Arc<Joining>) -> Optio
         tell: Mutex::new(tell),
         joining,
         linked,
+        requests,
     }))
 }
 
@@ -224,6 +236,9 @@ struct Thread {
     tell: Sender<Told>,
     /// What the page is told, which `Discord::page_shown` reads too.
     linked: Arc<Mutex<Linked>>,
+    /// The friends waiting to be let into the room showing, which
+    /// `Discord::page_shown` reads too.
+    requests: Arc<Mutex<Vec<Request>>>,
     site: Url,
     current: Option<(Shown, u64)>,
     offered: Instant,
@@ -271,6 +286,7 @@ impl Thread {
             people,
             invited,
             expiring,
+            requested,
         };
         unsafe {
             oeee_discord_start(
@@ -329,12 +345,18 @@ impl Thread {
             // minute.
             Told::Show(next) if self.current.as_ref().is_some_and(|(was, _)| *was == next) => {}
             Told::Show(next) => {
-                // The clock starts again when what they are doing changes,
-                // and not when only the count in the room does.
-                let start = match &self.current {
+                // The room's own clock, when it is in one; else the clock
+                // starts again when what they are doing changes, and not
+                // when only the count in the room does.
+                let start = next.since.unwrap_or_else(|| match &self.current {
                     Some((was, start)) if same_doing(was, &next) => *start,
                     _ => now(),
-                };
+                });
+                // Asked into a room the player has left: nobody can be let
+                // into it from here any more.
+                if party(self.current.as_ref().map(|(s, _)| s)) != party(Some(&next)) {
+                    self.forget_requests();
+                }
                 self.show(&next, start);
                 self.current = Some((next, start));
             }
@@ -359,6 +381,20 @@ impl Thread {
                 self.friends_wanted = Some(Instant::now());
                 self.send_friends();
             }
+            Told::Asked(Asked::LetIn(user)) => {
+                let waiting = self
+                    .requests
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|r| r.id == user.to_string());
+                if self.status == READY && waiting {
+                    unsafe { oeee_discord_let_in(user) };
+                } else {
+                    self.eval(&invited_script(user, false));
+                }
+            }
+            Told::Asked(Asked::Dismiss(user)) => self.drop_request(user),
             Told::Asked(Asked::Invite(user)) => {
                 if self.status == READY
                     && self.current.as_ref().is_some_and(|(s, _)| s.room.is_some())
@@ -428,7 +464,35 @@ impl Thread {
             Told::TokenTaken(_, false) => self.forget_account(),
             Told::Status(status, error, detail) => self.status_changed(status, error, detail),
             Told::People => self.people_changed = Some(Instant::now()),
-            Told::Invited(user, sent) => self.eval(&invited_script(user, sent)),
+            Told::Invited(user, sent) => {
+                self.eval(&invited_script(user, sent));
+                // Let in: off the list. shim.cpp has let the request go.
+                if sent {
+                    self.drop_request(user);
+                }
+            }
+            Told::Requested(user, name, asked_into) => {
+                let here = party(self.current.as_ref().map(|(s, _)| s));
+                if here.is_some() && here == Some(asked_into.as_str()) {
+                    let request = Request {
+                        id: user.to_string(),
+                        name: if name.is_empty() {
+                            user.to_string()
+                        } else {
+                            name
+                        },
+                    };
+                    {
+                        let mut requests = self.requests.lock().unwrap();
+                        requests.retain(|r| r.id != request.id);
+                        requests.push(request);
+                    }
+                    self.send_requests();
+                } else {
+                    // A room the player is no longer in.
+                    unsafe { oeee_discord_forget_request(user) };
+                }
+            }
             // Kept until the new one comes, so that the account can still
             // be let go, or asked for again, should the site not answer.
             Told::Expiring => self.refresh(),
@@ -496,6 +560,7 @@ impl Thread {
     }
 
     fn let_go(&mut self) {
+        self.forget_requests();
         self.generation += 1;
         self.asking = false;
         self.ask_again = None;
@@ -517,6 +582,7 @@ impl Thread {
     /// the SDK would not take its access token -- and is forgotten, and let
     /// go of if it is connected yet.
     fn forget_account(&mut self) {
+        self.forget_requests();
         linking::forget(&self.site);
         self.refresh_token = None;
         self.ask_again = None;
@@ -607,6 +673,40 @@ impl Thread {
         self.eval(&friends_script(&friends));
     }
 
+    /// The page's list of who is waiting to be let in, as it is now.
+    fn send_requests(&self) {
+        let script = requests_script(&self.requests.lock().unwrap());
+        self.eval(&script);
+    }
+
+    /// Takes `user`'s request off the list, here and in shim.cpp.
+    fn drop_request(&mut self, user: u64) {
+        unsafe { oeee_discord_forget_request(user) };
+        let id = user.to_string();
+        let had = {
+            let mut requests = self.requests.lock().unwrap();
+            let before = requests.len();
+            requests.retain(|r| r.id != id);
+            requests.len() != before
+        };
+        if had {
+            self.send_requests();
+        }
+    }
+
+    /// Every request let go of, and the page told, if there were any.
+    fn forget_requests(&mut self) {
+        let forgotten = std::mem::take(&mut *self.requests.lock().unwrap());
+        for request in &forgotten {
+            if let Ok(user) = request.id.parse() {
+                unsafe { oeee_discord_forget_request(user) };
+            }
+        }
+        if !forgotten.is_empty() {
+            self.send_requests();
+        }
+    }
+
     /// Changes what the page is told, and tells it.
     fn set(&mut self, change: impl FnOnce(&mut Linked)) {
         let (script, connecting) = {
@@ -654,17 +754,15 @@ extern "C" fn person(data: *mut c_void, id: u64, name: OeeeText, status: i32, gr
     found.push(Friend::from_sdk(id, &name, status, group));
 }
 
+/// The party friends would be asked into, if the player is in one.
+fn party(shown: Option<&Shown>) -> Option<&str> {
+    shown?.room.as_ref().map(|room| room.party.as_str())
+}
+
 fn same_doing(a: &Shown, b: &Shown) -> bool {
     a.details == b.details
         && a.state == b.state
         && a.room.as_ref().map(|r| &r.party) == b.room.as_ref().map(|r| &r.party)
-}
-
-/// Milliseconds since the epoch, as Discord counts an activity's start.
-fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as u64)
 }
 
 fn tell(context: *mut c_void, told: Told) {
@@ -709,6 +807,11 @@ extern "C" fn expiring(context: *mut c_void) {
     tell(context, Told::Expiring);
 }
 
+extern "C" fn requested(context: *mut c_void, user: u64, name: OeeeText, party: OeeeText) {
+    let (name, party) = unsafe { (name.read(), party.read()) };
+    tell(context, Told::Requested(user, name, party));
+}
+
 /// A friend accepted the player's invitation, or the player's own request
 /// to join was let in: opens the room the secret names, and nothing else.
 extern "C" fn joined(context: *mut c_void, secret: OeeeText) {
@@ -738,8 +841,11 @@ impl Discord {
     /// is opened by main.rs, for Steam's friends as well.
     pub fn page_shown(&self) {
         let script = state_script(&self.linked.lock().unwrap());
+        // And who is waiting to be let in, for a room that was reloaded.
+        let requests = requests_script(&self.requests.lock().unwrap());
         if let Some(window) = self.joining.app().get_webview_window(WINDOW) {
             let _ = window.eval(&script);
+            let _ = window.eval(&requests);
         }
     }
 

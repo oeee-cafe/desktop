@@ -82,8 +82,8 @@ pub enum Message {
         url: String,
     },
     /// Something asked of the player's Discord account in this app
-    /// (discord.rs): "connect", "disconnect", "friends", or "invite" with
-    /// `user`, a Discord id as a string.
+    /// (discord.rs): "connect", "disconnect", "friends", or "invite",
+    /// "letIn" or "dismiss" with `user`, a Discord id as a string.
     Discord {
         action: String,
         #[serde(default)]
@@ -162,6 +162,10 @@ pub struct Page {
     pub seats: Option<i32>,
     #[serde(default)]
     pub party: Option<i32>,
+    /// When the room opened, in milliseconds since the epoch: the clock
+    /// Discord shows (discord.rs).
+    #[serde(default)]
+    pub since: Option<u64>,
 }
 
 /// What the site says about its colours, as far as the app uses them.

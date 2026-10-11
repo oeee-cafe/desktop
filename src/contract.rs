@@ -56,6 +56,7 @@ fn expected(kind: &str, m: &Value) -> Option<Message> {
             join: text(&m["join"]),
             seats: m["seats"].as_i64().map(|n| n as i32),
             party: m["party"].as_i64().map(|n| n as i32),
+            since: m["since"].as_u64(),
         }),
         "unread" => Message::Unread {
             count: m["count"].as_i64().expect("a count"),
@@ -270,6 +271,7 @@ fn every_member_the_app_calls_is_the_pages() {
         "store.ticket",
         "discord.state",
         "discord.friends",
+        "discord.requests",
         "discord.invited",
     ] {
         assert!(called.contains(member), "found no call of {member}");
