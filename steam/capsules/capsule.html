@@ -132,6 +132,25 @@
         ['puppy', 3250, 400, 540, -6],
       ],
     },
+    // App icon, 184 by 184 and a JPEG, so with no transparency: the mark
+    // alone on the ground, for lists and notifications.
+    icon: {
+      w: 184, h: 184, cell: 14,
+      logo: { center: true, mark: 140, word: 0, gap: 0, markOnly: true },
+      sheets: [],
+    },
+    // Shortcut icon, the app icon again at each of an ICO's sizes (?size=),
+    // as Steam makes the app icon from it too. At 48 and under the grid
+    // would be noise, so the mark sits on the bare ground, a little larger.
+    shortcut: (() => {
+      const n = Number(new URLSearchParams(location.search).get('size')) || 256;
+      const plain = n <= 48;
+      return {
+        w: n, h: n, cell: n * 20 / 256, plain,
+        logo: { center: true, mark: n * (plain ? 212 : 196) / 256, word: 0, gap: 0, markOnly: true },
+        sheets: [],
+      };
+    })(),
     // Library logo: the logo alone on a transparent ground, 1280 wide.
     logo: {
       w: 1280, h: 280, cell: 14, bare: true,
@@ -147,6 +166,7 @@
   stage.style.width = L.w + 'px';
   stage.style.height = L.h + 'px';
   stage.style.setProperty('--cell', L.cell + 'px');
+  if (L.plain) stage.style.backgroundImage = 'none';
 
   for (const [name, x, y, size, turn] of L.sheets) {
     const el = document.createElement('div');
@@ -166,7 +186,9 @@
   if (L.logo) {
     const logo = document.createElement('div');
     logo.className = L.logo.stack ? 'logo stack' : 'logo';
-    logo.innerHTML = `<img src="../../icons/icon.png" alt=""><span>Oeee Cafe</span>`;
+    logo.innerHTML = L.logo.markOnly
+      ? `<img src="../../icons/icon.png" alt="">`
+      : `<img src="../../icons/icon.png" alt=""><span>Oeee Cafe</span>`;
     logo.style.setProperty('--mark', L.logo.mark + 'px');
     logo.style.setProperty('--word-size', L.logo.word + 'px');
     logo.style.setProperty('--gap', L.logo.gap + 'px');
