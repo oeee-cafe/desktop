@@ -117,7 +117,7 @@ foreach ($arch in $Architectures) {
   $layout = Join-Path $out "layout-$arch"
   if (Test-Path $layout) { Remove-Item $layout -Recurse -Force }
   New-Item $layout -ItemType Directory | Out-Null
-  Copy-Item (Join-Path $root "target\$triple\release\oeee-cafe-desktop.exe") $layout
+  Copy-Item (Join-Path $root "target\$triple\release\oeee-cafe.exe") $layout
   # The Social SDK keeps Windows on ARM's library in a folder of its own.
   $sdkBin = Join-Path $root 'discord\social_sdk\bin\release'
   if ($arch -eq 'arm64') { $sdkBin = Join-Path $sdkBin 'arm64' }

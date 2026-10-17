@@ -46,7 +46,7 @@
   <Applications>
     <Application
       Id="OeeeCafe"
-      Executable="oeee-cafe-desktop.exe"
+      Executable="oeee-cafe.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="ms-resource:AppName"

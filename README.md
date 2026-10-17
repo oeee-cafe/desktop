@@ -248,14 +248,18 @@ Build on Windows:
 cargo tauri build
 ```
 
-and put `target/release/oeee-cafe-desktop.exe` in `steam/content/windows/`,
+and put `target/release/oeee-cafe.exe` (named by `tauri.conf.json`'s
+`mainBinaryName`) in `steam/content/windows/`,
 with `steam/redistributable/win64/steam_api64.dll` and
 `discord/social_sdk/bin/release/discord_partner_sdk.dll` beside it (Discord's
 Social SDK has to be unpacked first: discord/README.md); WebView2
 ships with Windows 10 and 11. Steam installs files and runs no installer,
 so the build makes none (`tauri.conf.json` leaves `bundle` inactive, and
 keeps only the `.exe`'s icon and copyright). Set the depot's launch option
-in Steamworks (Installation > General) to the `.exe`.
+in Steamworks (Installation > General) to `oeee-cafe.exe`, for Windows,
+64-bit. The `.exe` needs Microsoft's Visual C++ runtime (`vcruntime140.dll`,
+`msvcp140.dll`), which Steam installs when Installation > Redistributables
+has Visual C++ 2022 ticked; the two libraries beside it need nothing.
 
 Then upload:
 
