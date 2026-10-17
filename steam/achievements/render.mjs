@@ -14,6 +14,8 @@
 //
 //   PLAYWRIGHT=~/Git/oeee-cafe/neo-cucumber/node_modules/playwright/index.mjs \
 //     node steam/achievements/render.mjs
+//
+// and CHROME, below, uses an installed Chrome rather than Playwright's.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -39,7 +41,9 @@ const SIZE = 64;
 // for Steam's own frame.
 const GLYPH = 40;
 
-const browser = await chromium.launch();
+// CHROME names a browser to use instead of Playwright's own download, e.g.
+// CHROME="C:/Program Files/Google/Chrome/Application/chrome.exe".
+const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
 const page = await browser.newPage({ viewport: { width: SIZE, height: SIZE } });
 for (const [name, { d }] of Object.entries(icons)) {
   for (const [suffix, { ground, ink }] of Object.entries(looks)) {

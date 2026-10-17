@@ -197,14 +197,16 @@ looks like: discord/README.md.
 
 ## Achievements
 
-First drawing, first relay, first collaboration and buying the app on
+First drawing, first relay, first collaboration, drawing seven and thirty
+days in a row, and buying the app on
 Steam are unlocked by the site, not the app: it records them however the player drew, and sends them
 to Steam with the publisher key (`SetUserStatsForGame`). Linking Steam hands
 over everything already earned. `STEAM_SUPPORTER` goes to a Steam account
 that owns the app outright (`CheckAppOwnership`: not a Family Sharing loan,
 a free weekend or a site licence), checked at each Steam sign-in. In Steamworks (Stats & Achievements) the
-API names are `FIRST_DRAWING`, `FIRST_RELAY`, `FIRST_COLLABORATION` and
-`STEAM_SUPPORTER`, each
+API names are `FIRST_DRAWING`, `FIRST_RELAY`, `FIRST_COLLABORATION`,
+`STEAM_SUPPORTER`, `STREAK_7` and `STREAK_30` (`models/achievement.rs` in
+oeee-cafe/web, which has their names in every language), each
 "Set By: Official GS" so that only the server can unlock them.
 
 The icons Steamworks asks for are in `steam/achievements/`: `<NAME>.jpg`
