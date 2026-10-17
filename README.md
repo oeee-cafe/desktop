@@ -242,14 +242,9 @@ OEEE_CAFE_WEB=~/src/oeee-cafe-web ./scripts/sync-app-contract.sh
 
 ## Building for Steam
 
-Build on Windows:
-
-```bash
-cargo tauri build
-```
-
-and put `target/release/oeee-cafe.exe` (named by `tauri.conf.json`'s
-`mainBinaryName`) in `steam/content/windows/`,
+`steam/upload.sh` builds and uploads in one go, on Windows (Git Bash): it
+runs `cargo tauri build --no-bundle` and puts `target/release/oeee-cafe.exe`
+(named by `tauri.conf.json`'s `mainBinaryName`) in `steam/content/windows/`,
 with `steam/redistributable/win64/steam_api64.dll` and
 `discord/social_sdk/bin/release/discord_partner_sdk.dll` beside it (Discord's
 Social SDK has to be unpacked first: discord/README.md); WebView2
@@ -261,7 +256,7 @@ in Steamworks (Installation > General) to `oeee-cafe.exe`, for Windows,
 `msvcp140.dll`), which Steam installs when Installation > Redistributables
 has Visual C++ 2022 ticked; the two libraries beside it need nothing.
 
-Then upload:
+Build and upload:
 
 ```bash
 STEAM_APP_ID=... STEAM_USER=... \
@@ -269,7 +264,9 @@ STEAM_DEPOT_WINDOWS=... \
 ./steam/upload.sh "0.1.0"
 ```
 
-`steamcmd` asks for the password and Steam Guard code itself. Pick the branch
+`steamcmd` is the one on PATH, or the one `STEAMCMD` names; it asks for the
+password and Steam Guard code itself. `NO_BUILD=1` uploads
+`steam/content/windows/` as it is. Pick the branch
 the build goes live on in Steamworks (SteamPipe > Builds).
 
 ## Building for the Microsoft Store
