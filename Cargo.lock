@@ -2486,7 +2486,7 @@ dependencies = [
 
 [[package]]
 name = "oeee-cafe-desktop"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cc",
  "rfd",

@@ -263,7 +263,7 @@ Build and upload:
 ```bash
 STEAM_APP_ID=... STEAM_USER=... \
 STEAM_DEPOT_WINDOWS=... \
-./steam/upload.sh "0.1.0"
+./steam/upload.sh "1.0.0"
 ```
 
 `steamcmd` is the one on PATH, or the one `STEAMCMD` names; it asks for the
