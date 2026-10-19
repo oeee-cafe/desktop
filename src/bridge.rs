@@ -89,11 +89,13 @@ pub enum Message {
         #[serde(default)]
         user: Option<String>,
     },
-    /// Something asked of Steam in the Steam build (steam.rs): "invite",
-    /// with `join`, the path of the room to ask the player's Steam friends
-    /// into, which opens Steam's own invitation over the window.
+    /// Something asked of Steam in the Steam build (steam.rs): "friends",
+    /// for the room's picker, or "invite" `user`, a Steam id as a string,
+    /// into `join`, the path of the room showing.
     Steam {
         action: String,
+        #[serde(default)]
+        user: Option<String>,
         #[serde(default)]
         join: Option<String>,
     },

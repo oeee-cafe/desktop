@@ -1,20 +1,21 @@
 //! Steam's API itself, in a build with the `steam` feature: the ticket the
 //! page asks for, the rich presence, handed to Steam as `super` works them out,
 //! the overlay's store page for a DLC, word of one installed, the
-//! player's country for its price, and a friend's way into a room.
+//! player's country for its price, and the friends to ask into a room
+//! and a friend's way into one.
 
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use std::ffi::c_void;
+use std::ffi::{c_void, CString};
 
 use steamworks::{
-    sys, AppId, AuthTicket, Callback, CallbackHandle, Client, OverlayToStoreFlag,
-    TicketForWebApiResponse,
+    sys, AppId, AuthTicket, Callback, CallbackHandle, Client, FriendFlags, FriendState,
+    OverlayToStoreFlag, TicketForWebApiResponse,
 };
 
-use super::{hex, rich_presence};
+use super::{hex, rich_presence, Friend};
 use crate::bridge::Page;
 
 /// Names the service the ticket is for; the site accepts no other. Has to
@@ -227,15 +228,46 @@ impl Steam {
         *self.join_listener.lock().unwrap() = Some(Box::new(then));
     }
 
-    /// Opens Steam's invitation over the window: the player's friends, to
-    /// send `connect` -- a room's path, which holds no NUL -- to.
-    pub fn invite(&self, connect: &str) {
-        if connect.contains('\0') {
-            return;
-        }
+    /// The player's Steam friends, for the room's picker, by what the player
+    /// calls them: their nickname for a friend, or the friend's own name.
+    pub fn friends(&self) -> Vec<Friend> {
+        let ours = self.client.utils().app_id();
         self.client
             .friends()
-            .activate_invite_dialog_connect_string(connect);
+            .get_friends(FriendFlags::IMMEDIATE)
+            .into_iter()
+            .map(|friend| Friend {
+                id: friend.id().raw().to_string(),
+                name: friend.nick_name().unwrap_or_else(|| friend.name()),
+                status: match friend.state() {
+                    FriendState::Online
+                    | FriendState::LookingToPlay
+                    | FriendState::LookingToTrade => "online",
+                    FriendState::Away | FriendState::Snooze => "idle",
+                    FriendState::Busy => "dnd",
+                    FriendState::Offline | FriendState::Invisible => "offline",
+                },
+                playing: friend
+                    .game_played()
+                    .is_some_and(|game| game.game.app_id() == ours),
+            })
+            .collect()
+    }
+
+    /// Sends a friend Steam's invitation to `connect` -- a room's path,
+    /// which holds no NUL -- and says whether Steam took it. Called through
+    /// the API itself, as the crate's own throws the answer away.
+    pub fn invite(&self, user: u64, connect: &str) -> bool {
+        let Ok(connect) = CString::new(connect) else {
+            return false;
+        };
+        unsafe {
+            sys::SteamAPI_ISteamFriends_InviteUserToGame(
+                sys::SteamAPI_SteamFriends_v018(),
+                user,
+                connect.as_ptr(),
+            )
+        }
     }
 }
 

@@ -30,11 +30,19 @@
 //! And in a collaborative room a friend could enter, Steam's way in: the
 //! room's path as the `connect` key of the rich presence, so friends see
 //! Join Game on the player, and the room's Steam button (SessionHeader.tsx)
-//! sends `steam` with "invite" on the bridge, which opens Steam's own
-//! invitation over the window. A friend who joins or accepts has their
-//! app handed the path -- told by Steam while it runs, on its command line
-//! when Steam starts it -- and it opens the room (joining.rs). Only friends
-//! who own Oeee Cafe on Steam can.
+//! opens the player's Steam friends in the page: it asks `steam` "friends"
+//! on the bridge, the app answers `oeeeApp.steam.friends`, and each Invite
+//! is `steam` "invite" with the friend and the room, which Steam sends
+//! (`InviteUserToGame`) and the app says came of it with
+//! `oeeeApp.steam.invited`. The picker is the page's own rather than
+//! Steam's invitation over the window, because there is no overlay over
+//! this window: the web view draws in a process of its own, which Steam's
+//! overlay never hooks, so `ActivateGameOverlayInviteDialog` opened
+//! nothing. Every page of the site is told `oeeeApp.steam.ready`, and only
+//! a page told it offers the button. A friend who joins or accepts has
+//! their app handed the path -- told by Steam while it runs, on its command
+//! line when Steam starts it -- and it opens the room (joining.rs). Only
+//! friends who own Oeee Cafe on Steam can.
 //!
 //! Without Steam -- started from a terminal, or Steam not running, or the
 //! Microsoft Store's build, which has none -- the app is the same window
@@ -52,7 +60,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, WebviewWindow};
 
 use crate::bridge::Page;
 use crate::joining::{room_path, Joining};
@@ -95,7 +103,11 @@ impl Steam {
         match *self {}
     }
 
-    pub fn invite(&self, _connect: &str) {
+    pub fn friends(&self) -> Vec<Friend> {
+        match *self {}
+    }
+
+    pub fn invite(&self, _user: u64, _connect: &str) -> bool {
         match *self {}
     }
 
@@ -239,14 +251,93 @@ pub fn watch_joins(steam: &Option<Arc<Steam>>, joining: Arc<Joining>) {
     });
 }
 
-/// Opens Steam's own invitation over the window, for the room `join` opens
-/// (`steam` on the bridge, bridge.rs): Steam lists the player's friends and
-/// sends it, and a friend who accepts has Steam open their own app on it.
-/// The page names the room by its path, and anything else is not offered.
-pub fn invite(steam: &Steam, join: &str) {
-    match room_path(join) {
-        Some(path) => steam.invite(&path),
-        None => eprintln!("not a room to invite Steam friends into: {join:?}"),
+/// A Steam friend, as the room's picker lists them: the same as a Discord
+/// friend is (discord.rs), so the page draws both alike.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct Friend {
+    /// A Steam id: a string, since a number in the page cannot hold one.
+    pub id: String,
+    pub name: String,
+    /// "online", "idle", "dnd" or "offline".
+    pub status: &'static str,
+    /// In Oeee Cafe now.
+    pub playing: bool,
+}
+
+/// Those in Oeee Cafe first, then whoever is online, each by name.
+fn in_order(mut friends: Vec<Friend>) -> Vec<Friend> {
+    friends.sort_by_cached_key(|friend| {
+        (
+            !friend.playing,
+            friend.status == "offline",
+            friend.name.to_lowercase(),
+        )
+    });
+    friends
+}
+
+/// Tells a page of the site that the room's Steam picker can be offered:
+/// an app from before it opened Steam's invitation over the window, which
+/// never showed (the module's comment), and is not told this.
+const READY_SCRIPT: &str =
+    "window.oeeeApp && window.oeeeApp.steam && window.oeeeApp.steam.ready && window.oeeeApp.steam.ready();";
+
+/// Hands the page the player's Steam friends.
+fn friends_script(friends: &[Friend]) -> String {
+    format!(
+        "window.oeeeApp && window.oeeeApp.steam && window.oeeeApp.steam.friends && window.oeeeApp.steam.friends({});",
+        quoted(&friends)
+    )
+}
+
+/// Tells the page whether Steam took the invitation to `user`.
+fn invited_script(user: &str, sent: bool) -> String {
+    format!(
+        "window.oeeeApp && window.oeeeApp.steam && window.oeeeApp.steam.invited && window.oeeeApp.steam.invited({});",
+        quoted(&serde_json::json!({ "user": user, "sent": sent }))
+    )
+}
+
+/// A page of the site has said what it is: it is told Steam is here to ask.
+pub fn page_shown(window: &WebviewWindow) {
+    let _ = window.eval(READY_SCRIPT);
+}
+
+/// A Steam id as the page sends one: a number, and not nobody's.
+fn steam_id(user: Option<&str>) -> Option<u64> {
+    user?.parse().ok().filter(|id| *id != 0)
+}
+
+/// What the room's picker asks (`steam` on the bridge, bridge.rs):
+/// "friends", answered with the list, or "invite" `user` into the room
+/// `join` opens, answered with whether Steam sent it. A friend who accepts
+/// has Steam open their own app on it. The page names the room by its
+/// path, and anything else is not offered.
+pub fn asked(
+    window: &WebviewWindow,
+    steam: &Steam,
+    action: &str,
+    user: Option<&str>,
+    join: Option<&str>,
+) {
+    match action {
+        "friends" => {
+            let _ = window.eval(friends_script(&in_order(steam.friends())));
+        }
+        "invite" => {
+            let Some(user) = user else {
+                return;
+            };
+            let sent = match (steam_id(Some(user)), join.and_then(room_path)) {
+                (Some(id), Some(path)) => steam.invite(id, &path),
+                _ => {
+                    eprintln!("not a Steam friend and room to invite: {user:?}, {join:?}");
+                    false
+                }
+            };
+            let _ = window.eval(invited_script(user, sent));
+        }
+        _ => {}
     }
 }
 
@@ -572,6 +663,64 @@ mod tests {
         // What Steam answers a request it cannot read, and an error page.
         assert!(prices_from("null").is_err());
         assert!(prices_from("<html>").is_err());
+    }
+
+    fn friend(name: &str, status: &'static str, playing: bool) -> Friend {
+        Friend {
+            id: name.to_string(),
+            name: name.to_string(),
+            status,
+            playing,
+        }
+    }
+
+    #[test]
+    fn friends_in_oeee_cafe_come_first_then_whoever_is_online() {
+        let listed = in_order(vec![
+            friend("zebra", "offline", false),
+            friend("Mochi", "idle", false),
+            friend("pickle", "online", true),
+            friend("apple", "offline", false),
+            friend("넬리", "dnd", false),
+            friend("banana", "online", false),
+        ]);
+        let names: Vec<&str> = listed.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["pickle", "banana", "Mochi", "넬리", "apple", "zebra"]
+        );
+    }
+
+    #[test]
+    fn the_picker_is_answered_quoted_as_javascript() {
+        let script = friends_script(&[Friend {
+            id: "76561197960287930".to_string(),
+            name: "a\"); b(\"".to_string(),
+            status: "online",
+            playing: true,
+        }]);
+        assert!(script.starts_with(
+            "window.oeeeApp && window.oeeeApp.steam && window.oeeeApp.steam.friends && "
+        ));
+        assert!(script.contains(r#""id":"76561197960287930""#));
+        assert!(script.contains(r#""name":"a\"); b(\"""#));
+        assert!(invited_script("76561197960287930", true)
+            .ends_with(r#".invited({"sent":true,"user":"76561197960287930"});"#));
+    }
+
+    #[test]
+    fn only_a_steam_id_is_invited() {
+        assert_eq!(steam_id(Some("76561197960287930")), Some(76561197960287930));
+        for user in [
+            None,
+            Some(""),
+            Some("0"),
+            Some("-1"),
+            Some("7.6e16"),
+            Some("x"),
+        ] {
+            assert_eq!(steam_id(user), None, "{user:?}");
+        }
     }
 
     #[test]

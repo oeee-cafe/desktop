@@ -70,6 +70,7 @@ fn expected(kind: &str, m: &Value) -> Option<Message> {
         },
         "steam" => Message::Steam {
             action: text(&m["action"]).expect("an action"),
+            user: text(&m["user"]),
             join: text(&m["join"]),
         },
         "notify" => Message::Notify {
@@ -273,6 +274,9 @@ fn every_member_the_app_calls_is_the_pages() {
         "discord.friends",
         "discord.requests",
         "discord.invited",
+        "steam.ready",
+        "steam.friends",
+        "steam.invited",
     ] {
         assert!(called.contains(member), "found no call of {member}");
     }

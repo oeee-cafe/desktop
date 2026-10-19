@@ -169,11 +169,17 @@ app sets that Steam has not been given shows nothing.
 In a collaborative room a friend could enter, the page's `join` -- the room's
 path -- is also the rich presence's `connect` key, so friends who own Oeee
 Cafe on Steam see Join Game on the player in their friends list. The room's
-Steam button (`SessionHeader.tsx` in oeee-cafe/web), shown only in the Steam
-build, sends `steam` with "invite" and the path on the bridge, and the app
-opens Steam's own invitation over the window
-(`ActivateGameOverlayInviteDialogConnectString`): Steam lists the friends and
-sends it, and nothing comes back to the page. A friend who joins or accepts
+Steam button (`SessionHeader.tsx` in oeee-cafe/web), shown only on a page
+the Steam build has told `oeeeApp.steam.ready`, opens the player's Steam
+friends in the page, in the same window as Discord's: it sends `steam` with
+"friends" on the bridge and the app answers `oeeeApp.steam.friends`, those
+in Oeee Cafe first; each Invite sends `steam` "invite" with the friend's
+Steam id and the path, the app has Steam send it (`InviteUserToGame`), and
+`oeeeApp.steam.invited` says whether Steam took it. It is not Steam's own
+invitation over the window (`ActivateGameOverlayInviteDialogConnectString`),
+as it was at first: Steam's overlay is never started for this app -- the
+web view draws in a process of its own, which the overlay does not hook --
+so that dialog opened nowhere. A friend who joins or accepts
 has the path handed to their app -- by `GameRichPresenceJoinRequested_t`
 while it runs, which `src/steam/client.rs` reads itself since the crate's
 panics on a string that is not UTF-8, or on its command line when Steam

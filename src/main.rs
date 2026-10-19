@@ -114,6 +114,7 @@ fn listen_to_the_site(
                 }
                 if let Some(steam) = &steam {
                     steam.show_presence(Some(&page));
+                    steam::page_shown(&window);
                 }
                 if let Some(discord) = &discord {
                     discord.show_presence(Some(&page));
@@ -146,10 +147,10 @@ fn listen_to_the_site(
                     discord.asked(asked);
                 }
             }
-            // Only the Steam build's page offers Steam's invitation.
-            Some(bridge::Message::Steam { action, join }) => {
-                if let (Some(steam), "invite", Some(join)) = (&steam, action.as_str(), join) {
-                    steam::invite(steam, &join);
+            // Only a page the Steam build told `steam.ready` asks.
+            Some(bridge::Message::Steam { action, user, join }) => {
+                if let Some(steam) = &steam {
+                    steam::asked(&window, steam, &action, user.as_deref(), join.as_deref());
                 }
             }
             // The page asks this app only for Steam's sign-in, and only where
