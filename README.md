@@ -169,9 +169,8 @@ app sets that Steam has not been given shows nothing.
 In a collaborative room a friend could enter, the page's `join` -- the room's
 path -- is also the rich presence's `connect` key, so friends who own Oeee
 Cafe on Steam see Join Game on the player in their friends list. The room's
-Steam button (`SessionHeader.tsx` in oeee-cafe/web), shown only on a page
-the Steam build has told `oeeeApp.steam.ready`, opens the player's Steam
-friends in the page, in the same window as Discord's: it sends `steam` with
+Steam button (`SessionHeader.tsx` in oeee-cafe/web), shown only in the Steam
+build, opens the player's Steam friends in the page, in the same window as Discord's: it sends `steam` with
 "friends" on the bridge and the app answers `oeeeApp.steam.friends`, those
 in Oeee Cafe first; each Invite sends `steam` "invite" with the friend's
 Steam id and the path, the app has Steam send it (`InviteUserToGame`), and

@@ -114,7 +114,6 @@ fn listen_to_the_site(
                 }
                 if let Some(steam) = &steam {
                     steam.show_presence(Some(&page));
-                    steam::page_shown(&window);
                 }
                 if let Some(discord) = &discord {
                     discord.show_presence(Some(&page));
@@ -147,7 +146,7 @@ fn listen_to_the_site(
                     discord.asked(asked);
                 }
             }
-            // Only a page the Steam build told `steam.ready` asks.
+            // Only the Steam build's page offers Steam's friends to invite.
             Some(bridge::Message::Steam { action, user, join }) => {
                 if let Some(steam) = &steam {
                     steam::asked(&window, steam, &action, user.as_deref(), join.as_deref());

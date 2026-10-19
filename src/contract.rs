@@ -274,7 +274,6 @@ fn every_member_the_app_calls_is_the_pages() {
         "discord.friends",
         "discord.requests",
         "discord.invited",
-        "steam.ready",
         "steam.friends",
         "steam.invited",
     ] {

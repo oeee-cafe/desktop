@@ -38,9 +38,7 @@
 //! Steam's invitation over the window, because there is no overlay over
 //! this window: the web view draws in a process of its own, which Steam's
 //! overlay never hooks, so `ActivateGameOverlayInviteDialog` opened
-//! nothing. Every page of the site is told `oeeeApp.steam.ready`, and only
-//! a page told it offers the button. A friend who joins or accepts has
-//! their app handed the path -- told by Steam while it runs, on its command
+//! nothing. A friend who joins or accepts has their app handed the path -- told by Steam while it runs, on its command
 //! line when Steam starts it -- and it opens the room (joining.rs). Only
 //! friends who own Oeee Cafe on Steam can.
 //!
@@ -276,12 +274,6 @@ fn in_order(mut friends: Vec<Friend>) -> Vec<Friend> {
     friends
 }
 
-/// Tells a page of the site that the room's Steam picker can be offered:
-/// an app from before it opened Steam's invitation over the window, which
-/// never showed (the module's comment), and is not told this.
-const READY_SCRIPT: &str =
-    "window.oeeeApp && window.oeeeApp.steam && window.oeeeApp.steam.ready && window.oeeeApp.steam.ready();";
-
 /// Hands the page the player's Steam friends.
 fn friends_script(friends: &[Friend]) -> String {
     format!(
@@ -296,11 +288,6 @@ fn invited_script(user: &str, sent: bool) -> String {
         "window.oeeeApp && window.oeeeApp.steam && window.oeeeApp.steam.invited && window.oeeeApp.steam.invited({});",
         quoted(&serde_json::json!({ "user": user, "sent": sent }))
     )
-}
-
-/// A page of the site has said what it is: it is told Steam is here to ask.
-pub fn page_shown(window: &WebviewWindow) {
-    let _ = window.eval(READY_SCRIPT);
 }
 
 /// A Steam id as the page sends one: a number, and not nobody's.
