@@ -263,18 +263,29 @@ in Steamworks (Installation > General) to `oeee-cafe.exe`, for Windows,
 `msvcp140.dll`), which Steam installs when Installation > Redistributables
 has Visual C++ 2022 ticked; the two libraries beside it need nothing.
 
-Build and upload:
+Build and upload, with the app's id and its Windows depot's (Steamworks,
+SteamPipe > Depots):
 
 ```bash
-STEAM_APP_ID=... STEAM_USER=... \
-STEAM_DEPOT_WINDOWS=... \
+STEAM_APP_ID=5464070 STEAM_USER=... \
+STEAM_DEPOT_WINDOWS=5464071 \
 ./steam/upload.sh "1.0.0"
 ```
 
-`steamcmd` is the one on PATH, or the one `STEAMCMD` names; it asks for the
-password and Steam Guard code itself. `NO_BUILD=1` uploads
-`steam/content/windows/` as it is. Pick the branch
-the build goes live on in Steamworks (SteamPipe > Builds).
+The argument is the build's description in Steamworks; without one it is
+the checkout's short commit hash. `steamcmd` is the one on PATH, or the one
+`STEAMCMD` names; it asks for the password and Steam Guard code itself.
+`NO_BUILD=1` uploads `steam/content/windows/` as it is. The script writes
+its build scripts and steamcmd's logs to `steam/output/`.
+
+Every later build goes up the same way:
+
+1. bump `version` in `Cargo.toml` and `tauri.conf.json`, so the `.exe`
+   says what the description does;
+2. run `steam/upload.sh` with the new version;
+3. in Steamworks (SteamPipe > Builds), set the new build live on `default`
+   (or a beta branch) and publish when asked. An upload goes live on no
+   branch by itself, so players get nothing until then.
 
 ## Building for the Microsoft Store
 
