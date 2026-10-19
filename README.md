@@ -267,10 +267,7 @@ Build and upload, with the app's id and its Windows depot's (Steamworks,
 SteamPipe > Depots):
 
 ```powershell
-$env:STEAM_APP_ID = '5464070'
-$env:STEAM_DEPOT_WINDOWS = '5464071'
-$env:STEAM_USER = '...'
-& "$env:ProgramFiles\Git\bin\bash.exe" ./steam/upload.sh "1.0.0"
+$env:STEAM_APP_ID='5464070'; $env:STEAM_DEPOT_WINDOWS='5464071'; $env:STEAM_USER='limeburst'; & "$env:ProgramFiles\Git\bin\bash.exe" ./steam/upload.sh "1.0.0"
 ```
 
 Name Git's `bash.exe` rather than `bash`, which in PowerShell can be WSL's.
