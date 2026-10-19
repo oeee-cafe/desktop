@@ -5,15 +5,17 @@
 //
 //   swift icons/make_icon.swift <slice.png> <out.png>
 //
-// <slice.png> is the 1024px slice on transparency, padding and all, as in
-// oeee-cafe-apple's AppIcon.appiconset/transparent.png.
+// <slice.png> is the 1024px slice on transparency, padding and all:
+// oeee-cafe-apple's scripts/app-icon/slice.png.
 import AppKit
 import CoreGraphics
 
 let size = 1024.0
-// Fuller than Apple's 824 body: the taskbar shows the icon at 24 and 32px,
-// where a wide margin only makes it smaller than its neighbours.
-let body = 920.0
+// Nearly the whole canvas, as Windows icons are: the taskbar shows the icon
+// at 24 and 32px, where any margin only makes it smaller than its
+// neighbours. And no shadow under it, which Windows icons don't have and
+// which at those sizes reads as more margin.
+let body = 1000.0
 let inset = (size - body) / 2
 let cells = 10.0
 let lineWeight = 0.07  // of a cell, the site's 1px in 14
@@ -47,14 +49,6 @@ let ctx = CGContext(data: nil, width: Int(size), height: Int(size), bitsPerCompo
                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
 let rect = CGRect(x: inset, y: inset, width: body, height: body)
 let shape = squircle(in: rect)
-
-// A soft shadow under the body, kept small for the margin it has.
-ctx.saveGState()
-ctx.setShadow(offset: CGSize(width: 0, height: -8), blur: 16, color: color(0x000000, 0.25))
-ctx.addPath(shape)
-ctx.setFillColor(color(0xccccff))
-ctx.fillPath()
-ctx.restoreGState()
 
 // The ground and its grid, lines on the cell boundaries so the grid is
 // symmetric about the centre.

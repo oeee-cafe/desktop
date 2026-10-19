@@ -369,5 +369,5 @@ changing it.
   invitation, has not.
 - **Icons.** The slice on a squircle of the site's lavender grid, as on iOS, Mac and Android.
   `icons/make_icons.sh <slice.png>` draws it (`icons/make_icon.swift`) from the 1024px slice
-  in oeee-cafe-apple's `AppIcon.appiconset/transparent.png`, writes the sizes in `icons/`,
+  in oeee-cafe-apple's `scripts/app-icon/slice.png`, writes the sizes in `icons/`,
   and runs `msstore/assets.sh`.

@@ -4,8 +4,8 @@
 #
 #   ./icons/make_icons.sh <slice.png>   # needs macOS (swift) and ImageMagick 7
 #
-# <slice.png> is the 1024px slice on transparency, as in oeee-cafe-apple's
-# OeeeCafe/Assets.xcassets/AppIcon.appiconset/transparent.png.
+# <slice.png> is the 1024px slice on transparency, oeee-cafe-apple's
+# scripts/app-icon/slice.png.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
