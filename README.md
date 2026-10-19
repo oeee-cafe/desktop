@@ -266,11 +266,14 @@ has Visual C++ 2022 ticked; the two libraries beside it need nothing.
 Build and upload, with the app's id and its Windows depot's (Steamworks,
 SteamPipe > Depots):
 
-```bash
-STEAM_APP_ID=5464070 STEAM_USER=... \
-STEAM_DEPOT_WINDOWS=5464071 \
-./steam/upload.sh "1.0.0"
+```powershell
+$env:STEAM_APP_ID = '5464070'
+$env:STEAM_DEPOT_WINDOWS = '5464071'
+$env:STEAM_USER = '...'
+& "$env:ProgramFiles\Git\bin\bash.exe" ./steam/upload.sh "1.0.0"
 ```
+
+Name Git's `bash.exe` rather than `bash`, which in PowerShell can be WSL's.
 
 The argument is the build's description in Steamworks; without one it is
 the checkout's short commit hash. `steamcmd` is the one on PATH, or the one
