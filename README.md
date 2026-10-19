@@ -367,5 +367,7 @@ changing it.
   scheme the manifest declares instead was seen to open the registered x64
   package, closed or already open; that Discord itself opens it, on an
   invitation, has not.
-- **Icons.** Generated from the 256px `static/favicon.png` in oeee-cafe/web; regenerate from a
-  1024px source with `cargo tauri icon <file>` before release.
+- **Icons.** The slice on a squircle of the site's lavender grid, as on iOS, Mac and Android.
+  `icons/make_icons.sh <slice.png>` draws it (`icons/make_icon.swift`) from the 1024px slice
+  in oeee-cafe-apple's `AppIcon.appiconset/transparent.png`, writes the sizes in `icons/`,
+  and runs `msstore/assets.sh`.
