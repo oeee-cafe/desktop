@@ -11,11 +11,11 @@ import AppKit
 import CoreGraphics
 
 let size = 1024.0
-// Nearly the whole canvas, as Windows icons are: the taskbar shows the icon
-// at 24 and 32px, where any margin only makes it smaller than its
-// neighbours. And no shadow under it, which Windows icons don't have and
-// which at those sizes reads as more margin.
-let body = 1000.0
+// The whole canvas, as Windows icons are: the taskbar shows the icon at 24
+// and 32px, where any margin only makes it smaller than its neighbours. And
+// no shadow under it, which Windows icons don't have and which at those
+// sizes reads as more margin.
+let body = 1024.0
 let inset = (size - body) / 2
 let cells = 10.0
 let lineWeight = 0.07  // of a cell, the site's 1px in 14
