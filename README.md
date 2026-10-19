@@ -267,15 +267,16 @@ Build and upload, with the app's id and its Windows depot's (Steamworks,
 SteamPipe > Depots):
 
 ```powershell
-$env:STEAM_APP_ID='5464070'; $env:STEAM_DEPOT_WINDOWS='5464071'; $env:STEAM_USER='limeburst'; & "$env:ProgramFiles\Git\bin\bash.exe" ./steam/upload.sh "1.0.0"
+$env:STEAMCMD='C:\steamcmd\steamcmd.exe'; $env:STEAM_APP_ID='5464070'; $env:STEAM_DEPOT_WINDOWS='5464071'; $env:STEAM_USER='limeburst'; & "$env:ProgramFiles\Git\bin\bash.exe" ./steam/upload.sh "1.0.0"
 ```
 
 Name Git's `bash.exe` rather than `bash`, which in PowerShell can be WSL's.
 
 The argument is the build's description in Steamworks; without one it is
-the checkout's short commit hash. `steamcmd` is the one on PATH, or the one
-`STEAMCMD` names; it asks for the password and Steam Guard code itself.
-`NO_BUILD=1` uploads `steam/content/windows/` as it is. The script writes
+the checkout's short commit hash. `STEAMCMD` names steamcmd, unpacked to
+`C:\steamcmd` as Valve's guide suggests (without it, the script looks on
+PATH); it asks for the password and Steam Guard code itself. `NO_BUILD=1`
+uploads `steam/content/windows/` as it is. The script writes
 its build scripts and steamcmd's logs to `steam/output/`.
 
 Every later build goes up the same way:
