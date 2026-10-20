@@ -1,0 +1,53 @@
+[h2]Draw like it's 2005 again[/h2]
+Oeee Cafe is an online drawing community inspired by the oekaki boards of the 2000s: small canvases, simple tools, and a timeline full of drawings by people who love to doodle. There is no story, no levels and no score. You draw, post your drawings, and swap comments and reactions with other artists. You can play for five minutes or five hours, solo or with friends.
+
+[h2]Classic oekaki painters[/h2]
+[list]
+[*][b]Neo Cucumber[/b], our painter in the spirit of PaintBBS NEO: pens, fill, lines, rectangles, ovals and Bézier curves, gradation, halftone, blur and mask tools, layers, undo and redo, zoom, pan and flip.
+[*]Ready-made color palettes (pastel, sakura, sepia, grayscale and more), plus an optional drawing timer if you like a challenge.
+[*][b]Tegaki[/b] as a second painter, for those who prefer it.
+[/list]
+
+[h2]Every stroke replays[/h2]
+Every drawing is recorded as you make it. Open any post and watch it come together stroke by stroke, at ½×, 1×, 2× or 4× speed. It's a great way to learn how other artists work. You can keep your own replays private if you want.
+
+[h2]Draw together in real time[/h2]
+[list]
+[*]Open a collaborative room for 2, 4, 6 or 8 artists on a 300×300, 1024×768 or 1000×1000 canvas.
+[*]Each artist draws on their own layers. Anyone can show or hide a participant's layers.
+[*]Let spectators watch the drawing as it happens and chat along without taking a seat.
+[*]List the room in the public lobby, or keep it private and share the link.
+[*]Invite Steam friends right from the room. Friends who own Oeee Cafe can also use Join Game from your Steam profile.
+[/list]
+
+[h2]Relays[/h2]
+Pick up someone else's drawing and continue it in a relay, turn after turn. Each artist decides whether their drawings are open to relays.
+
+[h2]Communities[/h2]
+[list]
+[*]Join communities around the topics you love, or start your own: public for everyone, or private for invited members only.
+[*]Appoint moderators and invite people by username.
+[*]Try two-tone communities, where every drawing uses just the community's two colors.
+[/list]
+
+[h2]Your own corner of the cafe[/h2]
+[list]
+[*]A profile with a banner you draw yourself, your links, and a guestbook visitors can sign.
+[*]Follow artists and see their new drawings in your timeline.
+[*]Leave comments, @mentions and emoji reactions, and get notified when someone replies.
+[*]Search drawings, people and tags.
+[*]Drafts keep unfinished drawings safe, and you can download any drawing as a PNG.
+[/list]
+
+[h2]Steam features[/h2]
+[list]
+[*]Sign in with your Steam account.
+[*]Achievements for your first drawing, your first collaboration, and drawing streaks of 7 and 30 days.
+[*]Rich Presence shows friends whether you're drawing, relaying, drawing together or watching a replay.
+[*]Optional Supporter Pack DLC: supporters get a badge and one "pickle" a week, the rarest thank-you on Oeee Cafe, to give to a drawing they love.
+[/list]
+
+[h2]Languages[/h2]
+English, Korean, Japanese and Simplified Chinese.
+
+[i]Oeee Cafe is an online community and needs an internet connection.[/i]

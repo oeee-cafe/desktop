@@ -247,6 +247,13 @@ the contract, from a checkout beside this one or from `OEEE_CAFE_WEB`:
 OEEE_CAFE_WEB=~/src/oeee-cafe-web ./scripts/sync-app-contract.sh
 ```
 
+## The store page
+
+The store page's "About This Game" is `steam/store_description.txt`, in
+Steam's markup: paste it into Steamworks (Store Page Admin > Description)
+whenever it changes. It names only what the site and the app do, so change
+it along with them.
+
 ## Building for Steam
 
 `steam/upload.sh` builds and uploads in one go, on Windows (Git Bash): it
